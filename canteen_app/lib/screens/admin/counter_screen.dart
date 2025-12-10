@@ -109,18 +109,23 @@ class _ScanAndPayTabState extends State<ScanAndPayTab> {
   }
 
   Future<void> _loadMenuItems() async {
+    // Simple query - sort client-side to avoid composite index
     final snapshot = await FirebaseFirestore.instance
         .collection('menu')
         .where('isAvailable', isEqualTo: true)
-        .orderBy('name')
         .get();
     
+    final items = snapshot.docs.map((doc) => {
+      'id': doc.id,
+      'name': doc['name'] as String,
+      'price': (doc['price'] as num).toDouble(),
+    }).toList();
+    
+    // Sort by name client-side
+    items.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    
     setState(() {
-      _menuItems = snapshot.docs.map((doc) => {
-        'id': doc.id,
-        'name': doc['name'] as String,
-        'price': (doc['price'] as num).toDouble(),
-      }).toList();
+      _menuItems = items;
     });
   }
 
@@ -1068,9 +1073,9 @@ class TransactionLogsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
+      // Simple query - sort client-side
       stream: FirebaseFirestore.instance
           .collection('wallet_transactions')
-          .orderBy('createdAt', descending: true)
           .limit(100)
           .snapshots(),
       builder: (context, snapshot) {
@@ -1082,7 +1087,13 @@ class TransactionLogsTab extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final transactions = snapshot.data!.docs;
+        // Sort client-side
+        final transactions = snapshot.data!.docs.toList();
+        transactions.sort((a, b) {
+          final aTime = ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+          final bTime = ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
 
         if (transactions.isEmpty) {
           return const Center(

@@ -282,10 +282,10 @@ class _MenuScreenState extends State<MenuScreen> {
           // Premium Menu Grid
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
+              // Simple query - sort client-side
               stream: FirebaseFirestore.instance
                   .collection('menu')
                   .where('isAvailable', isEqualTo: true)
-                  .orderBy('name')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -579,11 +579,9 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
           // Premium Slot Grid
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
+              // Simple query - filter and sort client-side
               stream: FirebaseFirestore.instance
                   .collection('orderSlots')
-                  .where('date', isEqualTo: _getTodayDate())
-                  .where('isActive', isEqualTo: true)
-                  .orderBy('startTime')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -607,7 +605,19 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
                     itemBuilder: (context, index) => const LoadingShimmer(height: 80),
                   );
                 }
-
+                
+                // Filter and sort client-side
+                final todayDate = _getTodayDate();
+                var slots = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return data['date'] == todayDate && data['isActive'] == true;
+                }).toList();
+                
+                slots.sort((a, b) {
+                  final aTime = (a.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
+                  final bTime = (b.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
+                  return aTime.compareTo(bTime);
+                });
                 final allSlots = snapshot.data!.docs;
                 final now = DateTime.now();
                 final validSlots = allSlots.where((slotDoc) {
@@ -1042,14 +1052,10 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // ⚠️ FIRESTORE COMPOSITE INDEX REQUIRED
-        // Collection: orders
-        // Fields: userId (Ascending), placedAt (Descending)
+        // Simple query - filter and sort client-side
         stream: FirebaseFirestore.instance
             .collection('orders')
             .where('userId', isEqualTo: user.uid)
-            .where('placedAt', isGreaterThan: _getTodayStart())
-            .orderBy('placedAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -1060,7 +1066,20 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final orders = snapshot.data!.docs;
+          // Filter and sort client-side
+          final todayStart = _getTodayStart();
+          var orders = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final placedAt = data['placedAt'] as Timestamp?;
+            if (placedAt == null) return false;
+            return placedAt.compareTo(todayStart) > 0;
+          }).toList();
+          
+          orders.sort((a, b) {
+            final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+            final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+            return bTime.compareTo(aTime);
+          });
 
           if (orders.isEmpty) {
             return const Center(child: Text('No orders yet. Place your first order!'));

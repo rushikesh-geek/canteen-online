@@ -155,14 +155,25 @@ class WalletService {
     return transactionRef.id;
   }
 
-  /// Get transaction history for user
+  /// Get transaction history for user (no composite index needed)
   Stream<QuerySnapshot> getTransactionHistory(String userId, {int limit = 50}) {
+    // Simple query - sort client-side to avoid composite index
     return _firestore
         .collection('wallet_transactions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots();
+  }
+  
+  /// Sort transactions by createdAt descending (call after getting snapshot)
+  List<QueryDocumentSnapshot> sortTransactions(List<QueryDocumentSnapshot> docs) {
+    final sorted = docs.toList();
+    sorted.sort((a, b) {
+      final aTime = ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      final bTime = ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      return bTime.compareTo(aTime);
+    });
+    return sorted;
   }
 
   /// Initialize wallet for new user (if not exists)

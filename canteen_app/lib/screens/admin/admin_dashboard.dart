@@ -119,7 +119,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final orders = snapshot.data!.docs;
+          // Apply client-side filtering to avoid composite index
+          final orders = _filterOrders(snapshot.data!.docs);
 
           if (orders.isEmpty) {
             return const Center(child: Text('No orders to display'));
@@ -163,28 +164,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Stream<QuerySnapshot> _buildOrderQuery() {
+    // Simple query - filter and sort client-side to avoid composite index
+    return _firestore.collection('orders').snapshots();
+  }
+  
+  /// Filter orders client-side to avoid Firestore composite index requirements
+  List<DocumentSnapshot> _filterOrders(List<DocumentSnapshot> orders) {
     final todayStart = _getTodayStart();
     
-    // Base query: all orders from today
-    Query query = _firestore
-        .collection('orders')
-        .where('placedAt', isGreaterThan: todayStart)
-        .orderBy('placedAt', descending: false); // Oldest first (FIFO)
-
+    // Filter today's orders
+    var filtered = orders.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final placedAt = data['placedAt'] as Timestamp?;
+      if (placedAt == null) return false;
+      return placedAt.compareTo(todayStart) > 0;
+    }).toList();
+    
     // Apply status filter
     if (selectedFilter != 'active' && selectedFilter != 'all') {
-      // ⚠️ FIRESTORE COMPOSITE INDEX REQUIRED
-      // Collection: orders
-      // Fields: placedAt (Ascending), status (Ascending)
-      // Reason: Inequality filter (isGreaterThan) + additional where() clause
-      query = _firestore
-          .collection('orders')
-          .where('placedAt', isGreaterThan: todayStart)
-          .where('status', isEqualTo: selectedFilter)
-          .orderBy('placedAt', descending: false);
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['status'] == selectedFilter;
+      }).toList();
     }
-
-    return query.snapshots();
+    
+    // Sort by placedAt ascending (FIFO)
+    filtered.sort((a, b) {
+      final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      return aTime.compareTo(bTime);
+    });
+    
+    return filtered;
   }
 
   Map<String, List<DocumentSnapshot>> _groupOrdersByStatus(List<DocumentSnapshot> orders) {

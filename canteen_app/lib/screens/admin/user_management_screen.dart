@@ -36,63 +36,118 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search and filter bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Row(
-              children: [
-                // Search field
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search by name or email...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value.toLowerCase();
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Role filter
-                DropdownButton<String>(
-                  value: _roleFilter,
-                  items: ['All', 'admin', 'counter', 'student'].map((role) {
-                    return DropdownMenuItem(
-                      value: role,
-                      child: Row(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 600;
+          
+          return Column(
+            children: [
+              // Search and filter bar - responsive
+              Container(
+                padding: EdgeInsets.all(isMobile ? 12 : 16),
+                color: Colors.white,
+                child: isMobile
+                    ? Column(
                         children: [
-                          Icon(
-                            _getRoleIcon(role),
-                            size: 18,
-                            color: _getRoleColor(role),
+                          // Search field
+                          TextField(
+                            decoration: InputDecoration(
+                              hintText: 'Search by name or email...',
+                              prefixIcon: const Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                              isDense: true,
+                            ),
+                            onChanged: (value) {
+                              setState(() {
+                                _searchQuery = value.toLowerCase();
+                              });
+                            },
                           ),
-                          const SizedBox(width: 8),
-                          Text(role.toUpperCase()),
+                          const SizedBox(height: 12),
+                          // Role filter as chips
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: ['All', 'admin', 'counter', 'student'].map((role) {
+                                final isSelected = _roleFilter == role;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(role.toUpperCase()),
+                                    selected: isSelected,
+                                    avatar: Icon(
+                                      _getRoleIcon(role),
+                                      size: 16,
+                                      color: isSelected ? Colors.white : _getRoleColor(role),
+                                    ),
+                                    onSelected: (selected) {
+                                      setState(() => _roleFilter = role);
+                                    },
+                                    backgroundColor: Colors.grey[100],
+                                    selectedColor: _getRoleColor(role),
+                                    labelStyle: TextStyle(
+                                      color: isSelected ? Colors.white : AppTheme.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          // Search field
+                          Expanded(
+                            child: TextField(
+                              decoration: InputDecoration(
+                                hintText: 'Search by name or email...',
+                                prefixIcon: const Icon(Icons.search),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                              ),
+                              onChanged: (value) {
+                                setState(() {
+                                  _searchQuery = value.toLowerCase();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Role filter dropdown
+                          DropdownButton<String>(
+                            value: _roleFilter,
+                            items: ['All', 'admin', 'counter', 'student'].map((role) {
+                              return DropdownMenuItem(
+                                value: role,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _getRoleIcon(role),
+                                      size: 18,
+                                      color: _getRoleColor(role),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(role.toUpperCase()),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _roleFilter = value);
+                              }
+                            },
+                          ),
                         ],
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _roleFilter = value;
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
+              ),
           
           // Users list
           Expanded(
@@ -109,6 +164,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 
                 var users = snapshot.data!.docs;
                 
+                // Apply role filter client-side (avoids composite index)
+                if (_roleFilter != 'All') {
+                  users = users.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return data['role'] == _roleFilter;
+                  }).toList();
+                }
+                
                 // Apply search filter
                 if (_searchQuery.isNotEmpty) {
                   users = users.where((doc) {
@@ -118,6 +181,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     return name.contains(_searchQuery) || email.contains(_searchQuery);
                   }).toList();
                 }
+                
+                // Sort by name client-side
+                users.sort((a, b) {
+                  final nameA = ((a.data() as Map<String, dynamic>)['name'] as String? ?? '').toLowerCase();
+                  final nameB = ((b.data() as Map<String, dynamic>)['name'] as String? ?? '').toLowerCase();
+                  return nameA.compareTo(nameB);
+                });
                 
                 if (users.isEmpty) {
                   return const Center(
@@ -173,21 +243,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               },
             ),
           ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
 
   Stream<QuerySnapshot> _buildUsersQuery() {
-    Query query = _firestore.collection('users').orderBy('name');
-    
-    if (_roleFilter != 'All') {
-      query = _firestore.collection('users')
-          .where('role', isEqualTo: _roleFilter)
-          .orderBy('name');
-    }
-    
-    return query.snapshots();
+    // Simple query without composite index - filter role client-side
+    return _firestore.collection('users').snapshots();
   }
 
   Widget _buildUserTile(String docId, Map<String, dynamic> data) {

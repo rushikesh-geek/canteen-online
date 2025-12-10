@@ -22,50 +22,95 @@ class _CounterOrdersScreenState extends State<CounterOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     return Column(
       children: [
-        // Filter bar
+        // Filter bar - responsive
         Container(
           padding: const EdgeInsets.all(12),
           color: Colors.white,
-          child: Row(
-            children: [
-              const Text(
-                'Payment: ',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(width: 8),
-              ...['All', 'WALLET', 'UPI', 'CASH'].map((filter) {
-                final isSelected = _paymentFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        _paymentFilter = filter;
-                      });
-                    },
-                    backgroundColor: Colors.grey[100],
-                    selectedColor: AppTheme.lightOrange,
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppTheme.deepOrange : AppTheme.textSecondary,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      fontSize: 12,
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Payment Filter',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 20),
+                          onPressed: () => setState(() {}),
+                          tooltip: 'Refresh',
+                        ),
+                      ],
                     ),
-                  ),
-                );
-              }),
-              const Spacer(),
-              // Refresh button
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => setState(() {}),
-                tooltip: 'Refresh',
-              ),
-            ],
-          ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: ['All', 'WALLET', 'UPI', 'CASH'].map((filter) {
+                          final isSelected = _paymentFilter == filter;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(filter),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                setState(() => _paymentFilter = filter);
+                              },
+                              backgroundColor: Colors.grey[100],
+                              selectedColor: AppTheme.lightOrange,
+                              labelStyle: TextStyle(
+                                color: isSelected ? AppTheme.deepOrange : AppTheme.textSecondary,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    const Text(
+                      'Payment: ',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 8),
+                    ...['All', 'WALLET', 'UPI', 'CASH'].map((filter) {
+                      final isSelected = _paymentFilter == filter;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(filter),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() => _paymentFilter = filter);
+                          },
+                          backgroundColor: Colors.grey[100],
+                          selectedColor: AppTheme.lightOrange,
+                          labelStyle: TextStyle(
+                            color: isSelected ? AppTheme.deepOrange : AppTheme.textSecondary,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () => setState(() {}),
+                      tooltip: 'Refresh',
+                    ),
+                  ],
+                ),
         ),
         
         // Orders list
@@ -81,7 +126,8 @@ class _CounterOrdersScreenState extends State<CounterOrdersScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               
-              final orders = snapshot.data!.docs;
+              // Apply client-side filtering
+              final orders = _filterOrders(snapshot.data!.docs);
               
               if (orders.isEmpty) {
                 return Center(
@@ -112,45 +158,83 @@ class _CounterOrdersScreenState extends State<CounterOrdersScreen> {
               
               return Column(
                 children: [
-                  // Summary bar
+                  // Summary bar - responsive
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     color: AppTheme.lightIndigo,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildSummaryItem(
-                          icon: Icons.receipt,
-                          label: 'Orders',
-                          value: orders.length.toString(),
-                          color: AppTheme.primaryIndigo,
-                        ),
-                        _buildSummaryItem(
-                          icon: Icons.payments,
-                          label: 'Total Sales',
-                          value: '₹${totalSales.toStringAsFixed(0)}',
-                          color: AppTheme.successGreen,
-                        ),
-                        _buildSummaryItem(
-                          icon: Icons.account_balance_wallet,
-                          label: 'Wallet',
-                          value: '₹${paymentTotals['WALLET']!.toStringAsFixed(0)}',
-                          color: AppTheme.primaryIndigo,
-                        ),
-                        _buildSummaryItem(
-                          icon: Icons.account_balance,
-                          label: 'UPI',
-                          value: '₹${paymentTotals['UPI']!.toStringAsFixed(0)}',
-                          color: Colors.green,
-                        ),
-                        _buildSummaryItem(
-                          icon: Icons.money,
-                          label: 'Cash',
-                          value: '₹${paymentTotals['CASH']!.toStringAsFixed(0)}',
-                          color: AppTheme.accentOrange,
-                        ),
-                      ],
-                    ),
+                    child: isMobile
+                        ? Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.spaceAround,
+                            children: [
+                              _buildSummaryItem(
+                                icon: Icons.receipt,
+                                label: 'Orders',
+                                value: orders.length.toString(),
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.payments,
+                                label: 'Total',
+                                value: '₹${totalSales.toStringAsFixed(0)}',
+                                color: AppTheme.successGreen,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.account_balance_wallet,
+                                label: 'Wallet',
+                                value: '₹${paymentTotals['WALLET']!.toStringAsFixed(0)}',
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.account_balance,
+                                label: 'UPI',
+                                value: '₹${paymentTotals['UPI']!.toStringAsFixed(0)}',
+                                color: Colors.green,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.money,
+                                label: 'Cash',
+                                value: '₹${paymentTotals['CASH']!.toStringAsFixed(0)}',
+                                color: AppTheme.accentOrange,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildSummaryItem(
+                                icon: Icons.receipt,
+                                label: 'Orders',
+                                value: orders.length.toString(),
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.payments,
+                                label: 'Total Sales',
+                                value: '₹${totalSales.toStringAsFixed(0)}',
+                                color: AppTheme.successGreen,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.account_balance_wallet,
+                                label: 'Wallet',
+                                value: '₹${paymentTotals['WALLET']!.toStringAsFixed(0)}',
+                                color: AppTheme.primaryIndigo,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.account_balance,
+                                label: 'UPI',
+                                value: '₹${paymentTotals['UPI']!.toStringAsFixed(0)}',
+                                color: Colors.green,
+                              ),
+                              _buildSummaryItem(
+                                icon: Icons.money,
+                                label: 'Cash',
+                                value: '₹${paymentTotals['CASH']!.toStringAsFixed(0)}',
+                                color: AppTheme.accentOrange,
+                              ),
+                            ],
+                          ),
                   ),
                   
                   // Orders list
@@ -175,25 +259,41 @@ class _CounterOrdersScreenState extends State<CounterOrdersScreen> {
   }
 
   Stream<QuerySnapshot> _buildQuery() {
+    // Simplified query - filter and sort client-side to avoid composite index
+    return FirebaseFirestore.instance
+        .collection('orders')
+        .where('orderType', isEqualTo: 'counter')
+        .snapshots();
+  }
+  
+  // Filter orders client-side
+  List<QueryDocumentSnapshot> _filterOrders(List<QueryDocumentSnapshot> orders) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
     
-    Query query = FirebaseFirestore.instance
-        .collection('orders')
-        .where('orderType', isEqualTo: 'counter')
-        .where('placedAt', isGreaterThan: Timestamp.fromDate(todayStart))
-        .orderBy('placedAt', descending: true);
+    var filtered = orders.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final placedAt = data['placedAt'] as Timestamp?;
+      if (placedAt == null) return false;
+      return placedAt.toDate().isAfter(todayStart);
+    }).toList();
     
+    // Apply payment filter
     if (_paymentFilter != 'All') {
-      query = FirebaseFirestore.instance
-          .collection('orders')
-          .where('orderType', isEqualTo: 'counter')
-          .where('paymentMethod', isEqualTo: _paymentFilter)
-          .where('placedAt', isGreaterThan: Timestamp.fromDate(todayStart))
-          .orderBy('placedAt', descending: true);
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['paymentMethod'] == _paymentFilter;
+      }).toList();
     }
     
-    return query.snapshots();
+    // Sort by placedAt descending
+    filtered.sort((a, b) {
+      final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      return bTime.compareTo(aTime);
+    });
+    
+    return filtered;
   }
 
   Widget _buildSummaryItem({

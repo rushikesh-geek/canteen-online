@@ -63,8 +63,31 @@ class _POSScreenState extends State<POSScreen> {
     return count;
   }
 
+  // Check if device is mobile (narrow screen)
+  bool _isMobile(BuildContext context) {
+    return MediaQuery.of(context).size.width < 768;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isMobile = _isMobile(context);
+    
+    if (isMobile) {
+      // Mobile: Single column with floating cart button
+      return Stack(
+        children: [
+          _buildMenuSection(),
+          // Floating cart button
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: _buildFloatingCartButton(context),
+          ),
+        ],
+      );
+    }
+    
+    // Desktop/Tablet: Side-by-side layout
     return Row(
       children: [
         // Left: Menu Items (70%)
@@ -73,11 +96,73 @@ class _POSScreenState extends State<POSScreen> {
           child: _buildMenuSection(),
         ),
         // Right: Cart & Checkout (30%)
-        Expanded(
-          flex: 3,
+        SizedBox(
+          width: 320,
           child: _buildCartSection(),
         ),
       ],
+    );
+  }
+
+  // Calculate grid columns based on screen width
+  int _getGridColumns(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width < 400) return 2;
+    if (width < 600) return 3;
+    if (width < 900) return 3;
+    return 4;
+  }
+
+  // Floating cart button for mobile view
+  Widget _buildFloatingCartButton(BuildContext context) {
+    return FloatingActionButton.extended(
+      onPressed: () => _showCartBottomSheet(context),
+      backgroundColor: AppTheme.primaryIndigo,
+      icon: Badge(
+        label: Text('$_itemCount'),
+        isLabelVisible: _itemCount > 0,
+        child: const Icon(Icons.shopping_cart, color: Colors.white),
+      ),
+      label: Text(
+        _totalAmount > 0 ? '₹${_totalAmount.toStringAsFixed(0)}' : 'Cart',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  // Cart bottom sheet for mobile
+  void _showCartBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Cart content
+              Expanded(child: _buildCartSection()),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -169,8 +254,8 @@ class _POSScreenState extends State<POSScreen> {
 
         return GridView.builder(
           padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _getGridColumns(context),
             childAspectRatio: 0.85,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,

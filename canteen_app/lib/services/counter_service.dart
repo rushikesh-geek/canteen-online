@@ -152,21 +152,52 @@ class CounterService {
     DateTime? endDate,
     String? paymentMethod,
   }) {
-    Query query = _firestore
-        .collection('orders')
-        .where('orderType', isEqualTo: 'counter');
+    // Simple query - filter client-side to avoid composite index
+    return _firestore.collection('orders').where('orderType', isEqualTo: 'counter').snapshots();
+  }
+  
+  /// Filter counter orders client-side
+  List<QueryDocumentSnapshot> filterCounterOrders(
+    List<QueryDocumentSnapshot> orders, {
+    DateTime? startDate,
+    DateTime? endDate,
+    String? paymentMethod,
+  }) {
+    var filtered = orders.toList();
     
     if (startDate != null) {
-      query = query.where('placedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
-    }
-    if (endDate != null) {
-      query = query.where('placedAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
-    }
-    if (paymentMethod != null && paymentMethod != 'All') {
-      query = query.where('paymentMethod', isEqualTo: paymentMethod);
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final placedAt = data['placedAt'] as Timestamp?;
+        if (placedAt == null) return false;
+        return placedAt.toDate().isAfter(startDate) || placedAt.toDate().isAtSameMomentAs(startDate);
+      }).toList();
     }
     
-    return query.orderBy('placedAt', descending: true).snapshots();
+    if (endDate != null) {
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final placedAt = data['placedAt'] as Timestamp?;
+        if (placedAt == null) return false;
+        return placedAt.toDate().isBefore(endDate) || placedAt.toDate().isAtSameMomentAs(endDate);
+      }).toList();
+    }
+    
+    if (paymentMethod != null && paymentMethod != 'All') {
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['paymentMethod'] == paymentMethod;
+      }).toList();
+    }
+    
+    // Sort by placedAt descending
+    filtered.sort((a, b) {
+      final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      return bTime.compareTo(aTime);
+    });
+    
+    return filtered;
   }
 
   /// Get daily summary for reporting
