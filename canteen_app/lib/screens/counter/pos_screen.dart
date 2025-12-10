@@ -11,6 +11,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -807,6 +808,10 @@ class _POSScreenState extends State<POSScreen> {
         title: 'Wallet Payment Successful',
         message: 'Amount ₹${_totalAmount.toStringAsFixed(2)} deducted from ${studentName}\'s wallet',
         orderId: orderRef.id,
+        items: items,
+        totalAmount: _totalAmount,
+        paymentMethod: 'WALLET',
+        customerName: studentName,
       );
       
       _clearCart();
@@ -882,6 +887,9 @@ class _POSScreenState extends State<POSScreen> {
         title: 'UPI Payment Received',
         message: 'Transaction ID: $transactionId',
         orderId: orderRef.id,
+        items: items,
+        totalAmount: _totalAmount,
+        paymentMethod: 'UPI',
       );
       
       _clearCart();
@@ -978,6 +986,9 @@ class _POSScreenState extends State<POSScreen> {
         title: 'Cash Payment Recorded',
         message: 'Order created successfully',
         orderId: orderRef.id,
+        items: items,
+        totalAmount: _totalAmount,
+        paymentMethod: 'CASH',
       );
       
       _clearCart();
@@ -1012,6 +1023,10 @@ class _POSScreenState extends State<POSScreen> {
     required String title,
     required String message,
     required String orderId,
+    required List<Map<String, dynamic>> items,
+    required double totalAmount,
+    required String paymentMethod,
+    String? customerName,
   }) {
     showDialog(
       context: context,
@@ -1037,6 +1052,21 @@ class _POSScreenState extends State<POSScreen> {
           ],
         ),
         actions: [
+          // Print Receipt Button
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _showReceiptDialog(
+                orderId: orderId,
+                items: items,
+                totalAmount: totalAmount,
+                paymentMethod: paymentMethod,
+                customerName: customerName ?? 'Walk-in Customer',
+              );
+            },
+            icon: const Icon(Icons.receipt_long),
+            label: const Text('Print Receipt'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
@@ -1047,6 +1077,238 @@ class _POSScreenState extends State<POSScreen> {
         ],
       ),
     );
+  }
+
+  /// Show receipt dialog with print option
+  void _showReceiptDialog({
+    required String orderId,
+    required List<Map<String, dynamic>> items,
+    required double totalAmount,
+    required String paymentMethod,
+    required String customerName,
+  }) {
+    final orderNumber = orderId.substring(orderId.length - 6).toUpperCase();
+    final now = DateTime.now();
+    final dateStr = '${now.day}/${now.month}/${now.year}';
+    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              const Text(
+                'CANTEEN',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+              const Text(
+                'Order Receipt',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              
+              // Divider
+              Container(
+                height: 1,
+                color: Colors.grey[300],
+                margin: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              
+              // Order Info
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Order #$orderNumber', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('$dateStr $timeStr', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Customer: $customerName', style: const TextStyle(fontSize: 12)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getPaymentColor(paymentMethod).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      paymentMethod,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _getPaymentColor(paymentMethod),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Divider
+              Container(
+                height: 1,
+                color: Colors.grey[300],
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              
+              // Items
+              ...items.map((item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${item['quantity']}x ${item['itemName']}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    Text(
+                      '₹${(item['subtotal'] as double).toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+              )),
+              
+              // Divider
+              Container(
+                height: 1,
+                color: Colors.grey[300],
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              
+              // Total
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'TOTAL',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '₹${totalAmount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.successGreen,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Footer
+              Text(
+                'Thank you for your order!',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        // Copy receipt to clipboard
+                        _copyReceiptToClipboard(
+                          orderNumber: orderNumber,
+                          items: items,
+                          totalAmount: totalAmount,
+                          paymentMethod: paymentMethod,
+                          customerName: customerName,
+                          dateStr: dateStr,
+                          timeStr: timeStr,
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Receipt copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: const Text('Copy'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Close'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryIndigo,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Color _getPaymentColor(String method) {
+    switch (method) {
+      case 'WALLET': return AppTheme.primaryIndigo;
+      case 'UPI': return AppTheme.successGreen;
+      case 'CASH': return AppTheme.accentOrange;
+      default: return Colors.grey;
+    }
+  }
+  
+  void _copyReceiptToClipboard({
+    required String orderNumber,
+    required List<Map<String, dynamic>> items,
+    required double totalAmount,
+    required String paymentMethod,
+    required String customerName,
+    required String dateStr,
+    required String timeStr,
+  }) {
+    final buffer = StringBuffer();
+    buffer.writeln('═══════════════════════════');
+    buffer.writeln('        CANTEEN RECEIPT');
+    buffer.writeln('═══════════════════════════');
+    buffer.writeln('Order #$orderNumber');
+    buffer.writeln('Date: $dateStr $timeStr');
+    buffer.writeln('Customer: $customerName');
+    buffer.writeln('Payment: $paymentMethod');
+    buffer.writeln('───────────────────────────');
+    
+    for (final item in items) {
+      final name = item['itemName'] as String;
+      final qty = item['quantity'] as int;
+      final subtotal = (item['subtotal'] as double).toStringAsFixed(2);
+      buffer.writeln('${qty}x $name');
+      buffer.writeln('                    ₹$subtotal');
+    }
+    
+    buffer.writeln('───────────────────────────');
+    buffer.writeln('TOTAL: ₹${totalAmount.toStringAsFixed(2)}');
+    buffer.writeln('═══════════════════════════');
+    buffer.writeln('   Thank you for visiting!');
+    
+    // Copy to clipboard
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
   }
 }
 
