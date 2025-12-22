@@ -390,16 +390,6 @@ For issues or questions:
 - Open an issue on GitHub
 - Check existing issues for solutions
 
-## Roadmap
 
-- [ ] Push notifications for order updates
-- [ ] QR code for order pickup
-- [ ] Payment gateway integration
-- [ ] Analytics dashboard for admin
-- [ ] Multi-language support
-- [ ] Dark mode theme
-- [ ] Progressive Web App (PWA) support
-
----
 
 **Built with ❤️ using Flutter & Firebase**
