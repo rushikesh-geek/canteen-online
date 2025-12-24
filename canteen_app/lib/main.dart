@@ -3,37 +3,34 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard.dart';
-import 'screens/student/student_screens.dart';
+import 'screens/student/user_dashboard.dart';
+import 'theme/app_theme.dart';
+import 'services/auth_service.dart';
 
 void main() async {
-  print('🍽️ CANTEEN APP MAIN() EXECUTING - NOT DEMO APP!');
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  print('🍽️ Firebase initialized, launching CanteenApp...');
   runApp(const CanteenApp());
 }
 
 class CanteenApp extends StatelessWidget {
-  const CanteenApp({Key? key}) : super(key: key);
+  const CanteenApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Canteen Queue System',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
       home: const AuthGate(),
     );
   }
 }
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({Key? key}) : super(key: key);
+  const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -55,18 +52,24 @@ class AuthGate extends StatelessWidget {
 }
 
 class RoleRouter extends StatelessWidget {
-  const RoleRouter({Key? key}) : super(key: key);
+  const RoleRouter({super.key});
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
     final isAdmin = user.email?.toLowerCase().contains('admin') ?? false;
-    return isAdmin ? const AdminDashboardScreen() : const MenuScreen();
+    
+    // Route to appropriate dashboard based on role
+    // Admin → AdminDashboardScreen
+    // Student → UserDashboardScreen (with Menu + My Orders tabs)
+    return isAdmin 
+        ? const AdminDashboardScreen() 
+        : const UserDashboardScreen();
   }
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -75,7 +78,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _error;
 
   @override
@@ -137,6 +142,40 @@ class _LoginScreenState extends State<LoginScreen> {
                         : const Text('Login', style: TextStyle(fontSize: 16)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey[400])),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: TextStyle(color: Colors.grey[600])),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey[400])),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _isGoogleLoading ? null : _signInWithGoogle,
+                    icon: _isGoogleLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.login, color: Color(0xFF4285F4)),
+                    label: const Text(
+                      'Sign in with Google',
+                      style: TextStyle(fontSize: 16, color: Colors.black87),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey[300]!),
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -163,6 +202,34 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _error = null;
+    });
+
+    try {
+      final user = await _authService.signInWithGoogle();
+      
+      if (user == null && mounted) {
+        // User cancelled sign-in
+        setState(() {
+          _error = 'Sign-in cancelled';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
       }
     }
   }

@@ -1,20 +1,19 @@
-/**
- * Slot Management Screen (Admin Only)
- * 
- * Features:
- * - Auto-generate slots for today/tomorrow
- * - Edit slot times and capacity
- * - Delete slots
- * - Add custom slots
- * - View booking status
- */
+/// Slot Management Screen (Admin Only)
+/// 
+/// Features:
+/// - Auto-generate slots for today/tomorrow
+/// - Edit slot times and capacity
+/// - Delete slots
+/// - Add custom slots
+/// - View booking status
+library;
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class SlotManagementScreen extends StatefulWidget {
-  const SlotManagementScreen({Key? key}) : super(key: key);
+  const SlotManagementScreen({super.key});
 
   @override
   State<SlotManagementScreen> createState() => _SlotManagementScreenState();

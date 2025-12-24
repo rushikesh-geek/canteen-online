@@ -12,7 +12,20 @@
           "package_name": "com.example.canteen_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "992459327172-5th79kddi5r565cg2v87vmicbtovtaog.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.canteen_app",
+            "certificate_hash": "4df871913e9b6b8b889fb8ea76fccb61af2481e4"
+          }
+        },
+        {
+          "client_id": "992459327172-qqalah17kmjg417a1ljo203nodkopsgv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCst0a7XPmCg3FWQnVmoj4IOil2ixeEXd4"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "992459327172-qqalah17kmjg417a1ljo203nodkopsgv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "992459327172-9144cs3jf3ksqcsoat105cmfk2uc3ej5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.canteenApp"
+              }
+            }
+          ]
         }
       }
     }
