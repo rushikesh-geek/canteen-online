@@ -97,14 +97,25 @@ class AuthService {
         'role': 'student', // Default role for Google Sign-In users
         'createdAt': FieldValue.serverTimestamp(),
         'provider': 'google',
+        // Wallet fields - initialize with zero balance
+        'walletBalance': 0.0,
+        'walletCreatedAt': FieldValue.serverTimestamp(),
       });
     } else {
       // Update photo URL and name if changed
-      await userRef.update({
+      final updateData = <String, dynamic>{
         'name': user.displayName ?? userDoc.data()?['name'] ?? 'User',
         'photoUrl': user.photoURL ?? userDoc.data()?['photoUrl'] ?? '',
         'lastLogin': FieldValue.serverTimestamp(),
-      });
+      };
+      
+      // Initialize wallet if not exists (for existing users)
+      if (userDoc.data()?['walletBalance'] == null) {
+        updateData['walletBalance'] = 0.0;
+        updateData['walletCreatedAt'] = FieldValue.serverTimestamp();
+      }
+      
+      await userRef.update(updateData);
     }
   }
 
