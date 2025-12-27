@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/student/student_screens.dart';
+import 'core/theme/app_theme.dart';
 
 void main() async {
   print('🍽️ CANTEEN APP MAIN() EXECUTING - NOT DEMO APP!');
@@ -23,10 +24,7 @@ class CanteenApp extends StatelessWidget {
     return MaterialApp(
       title: 'Canteen Queue System',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
       home: const AuthGate(),
     );
   }

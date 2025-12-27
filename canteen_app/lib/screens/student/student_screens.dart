@@ -1,15 +1,152 @@
 /**
  * Student App Screens
  * 
- * Minimal Flutter UI for order placement and tracking.
+ * Modern UI for order placement and tracking.
  * Connects to Firestore backend logic.
- * 
- * TODO: Add proper styling, error states, loading indicators
  */
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+// ============================================================================
+// REUSABLE WIDGETS
+// ============================================================================
+
+/// Menu Item Card - Modern card design for food items
+class MenuItemCard extends StatelessWidget {
+  final String name;
+  final double price;
+  final bool isAvailable;
+  final int quantity;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
+
+  const MenuItemCard({
+    Key? key,
+    required this.name,
+    required this.price,
+    this.isAvailable = true,
+    this.quantity = 0,
+    required this.onAdd,
+    required this.onRemove,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Dish name
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Spacer(),
+            
+            // Price
+            Text(
+              '₹${price.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            // Availability badge or add button
+            if (!isAvailable)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Unavailable',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              )
+            else if (quantity == 0)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: onAdd,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Add',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: onRemove,
+                    iconSize: 28,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      quantity.toString(),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle),
+                    onPressed: onAdd,
+                    iconSize: 28,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // ============================================================================
 // SCREEN 1: Menu Listing & Order Placement
@@ -31,6 +168,10 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final userName = user?.displayName ?? user?.email?.split('@')[0] ?? 'Student';
+    final greeting = _getGreeting();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Canteen Menu'),
@@ -41,97 +182,167 @@ class _MenuScreenState extends State<MenuScreen> {
             tooltip: 'Logout',
             onPressed: () async {
               await FirebaseAuth.instance.signOut();
-              // AuthGate will automatically redirect to LoginScreen
             },
           ),
-          // Show cart badge
-          if (cart.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Chip(
-                label: Text('${_getTotalItems()} items'),
-              ),
-            ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        // Real-time menu from Firestore
-        // Collection: menu
-        // Only shows items where isAvailable = true
-        stream: FirebaseFirestore.instance
-            .collection('menu')
-            .where('isAvailable', isEqualTo: true)
-            .orderBy('name')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final menuItems = snapshot.data!.docs;
-
-          if (menuItems.isEmpty) {
-            return const Center(
-              child: Text('No menu items available'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: menuItems.length,
-            itemBuilder: (context, index) {
-              final doc = menuItems[index];
-              final item = MenuItem(
-                id: doc.id,
-                name: doc['name'] as String,
-                price: (doc['price'] as num).toDouble(),
-              );
-              
-              // Cache menu item for later use
-              menuItemsCache[item.id] = item;
-              
-          final quantity = cart[item.id] ?? 0;
-          
-          return ListTile(
-            title: Text(item.name),
-            subtitle: Text('₹${item.price}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+      body: Column(
+        children: [
+          // Greeting Header
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor.withOpacity(0.05),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(24),
+                bottomRight: Radius.circular(24),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Decrease quantity
-                IconButton(
-                  icon: const Icon(Icons.remove_circle),
-                  onPressed: quantity > 0 ? () => _updateCart(item.id, -1) : null,
+                Text(
+                  '$greeting, $userName 👋',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
                 ),
-                // Show quantity
-                Text('$quantity', style: const TextStyle(fontSize: 16)),
-                // Increase quantity
-                IconButton(
-                  icon: const Icon(Icons.add_circle),
-                  onPressed: () => _updateCart(item.id, 1),
+                const SizedBox(height: 4),
+                const Text(
+                  'What would you like to eat today?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                  ),
                 ),
               ],
             ),
-          );
-        },
-      );
-        },
+          ),
+          
+          // Menu Grid
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('menu')
+                  .where('isAvailable', isEqualTo: true)
+                  .orderBy('name')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text('Error: ${snapshot.error}'),
+                      ],
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final menuItems = snapshot.data!.docs;
+
+                if (menuItems.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.restaurant,
+                          size: 64,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No menu items available',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Check back later!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black38,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _getCrossAxisCount(context),
+                    childAspectRatio: 0.85,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: menuItems.length,
+                  itemBuilder: (context, index) {
+                    final doc = menuItems[index];
+                    final item = MenuItem(
+                      id: doc.id,
+                      name: doc['name'] as String,
+                      price: (doc['price'] as num).toDouble(),
+                    );
+                    
+                    // Cache menu item
+                    menuItemsCache[item.id] = item;
+                    
+                    final quantity = cart[item.id] ?? 0;
+                    
+                    return MenuItemCard(
+                      name: item.name,
+                      price: item.price,
+                      isAvailable: true,
+                      quantity: quantity,
+                      onAdd: () => _updateCart(item.id, 1),
+                      onRemove: () => _updateCart(item.id, -1),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
-      bottomNavigationBar: cart.isNotEmpty
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: _proceedToSlotSelection,
-                  child: Text('Proceed to Order (₹${_getTotalAmount()})'),
-                ),
+      floatingActionButton: cart.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _proceedToSlotSelection,
+              icon: Badge(
+                label: Text(_getTotalItems().toString()),
+                child: const Icon(Icons.shopping_cart),
               ),
+              label: Text('₹${_getTotalAmount().toStringAsFixed(0)}'),
             )
           : null,
     );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
+  int _getCrossAxisCount(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width > 600) return 3;
+    return 2;
   }
 
   void _updateCart(String itemId, int delta) {
