@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'slot_management.dart';
+import 'counter_screen.dart';
+import 'user_management_screen.dart';
 
 // ============================================================================
 // SCREEN 1: Live Order Queue Dashboard
@@ -35,6 +37,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
+          // Counter operations - QR scan & wallet payments
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'Counter (Scan & Pay)',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CounterScreen()),
+              );
+            },
+          ),
           // Menu management button (Admin only)
           IconButton(
             icon: const Icon(Icons.restaurant_menu),
@@ -54,6 +67,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SlotManagementScreen()),
+              );
+            },
+          ),
+          // User management button (Admin only)
+          IconButton(
+            icon: const Icon(Icons.people),
+            tooltip: 'Manage Users & Roles',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserManagementScreen()),
               );
             },
           ),
