@@ -266,6 +266,83 @@ class WalletService {
     }
   }
 
+  /// Parse QR for identification only (used for Add Money)
+  /// 
+  /// This has relaxed validation:
+  /// - 24-hour expiration (instead of 5 minutes)
+  /// - No single-use check (since it's just for identification)
+  static Map<String, dynamic>? parsePaymentQRForIdentification(String qrData) {
+    try {
+      final parts = qrData.split('|');
+      
+      if (parts[0] != 'CANTEEN') {
+        return null;
+      }
+      
+      // New format with sessionId (6 parts)
+      if (parts.length == 6) {
+        final userId = parts[1];
+        final userName = parts[2];
+        final timestamp = int.parse(parts[3]);
+        final sessionId = parts[4];
+        final checksum = int.parse(parts[5]);
+        
+        // Validate checksum
+        final expectedChecksum = (userId.hashCode ^ userName.hashCode ^ timestamp ^ sessionId.hashCode).abs() % 100000;
+        if (checksum != expectedChecksum) {
+          return {'error': 'Invalid QR code. Please generate a new one.'};
+        }
+        
+        // For identification, allow 24 hours (more relaxed)
+        final qrTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        final now = DateTime.now();
+        if (now.difference(qrTime).inHours > 24) {
+          return {'error': 'QR code expired. Please generate a new one.'};
+        }
+        
+        return {
+          'userId': userId,
+          'userName': userName,
+          'timestamp': qrTime,
+          'sessionId': sessionId,
+          'isValid': true,
+        };
+      }
+      
+      // Old format (5 parts) - still support for identification
+      if (parts.length == 5) {
+        final userId = parts[1];
+        final userName = parts[2];
+        final timestamp = int.parse(parts[3]);
+        final checksum = int.parse(parts[4]);
+        
+        // Validate old checksum format
+        final expectedChecksum = (userId.hashCode ^ userName.hashCode ^ timestamp).abs() % 10000;
+        if (checksum != expectedChecksum) {
+          return {'error': 'Invalid QR code. Please generate a new one.'};
+        }
+        
+        final qrTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        final now = DateTime.now();
+        if (now.difference(qrTime).inHours > 24) {
+          return {'error': 'QR code expired. Please generate a new one.'};
+        }
+        
+        return {
+          'userId': userId,
+          'userName': userName,
+          'timestamp': qrTime,
+          'sessionId': null, // Old format doesn't have sessionId
+          'isValid': true,
+        };
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Get user details by ID
   Future<Map<String, dynamic>?> getUserDetails(String userId) async {
     final doc = await _firestore.collection('users').doc(userId).get();

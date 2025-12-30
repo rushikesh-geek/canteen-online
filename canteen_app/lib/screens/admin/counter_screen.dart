@@ -775,7 +775,8 @@ class _AddMoneyTabState extends State<AddMoneyTab> {
     });
 
     try {
-      final parsed = WalletService.parsePaymentQR(qrData);
+      // Use relaxed parsing for Add Money (24hr expiry, no single-use check)
+      final parsed = WalletService.parsePaymentQRForIdentification(qrData);
       
       if (parsed == null || parsed['error'] != null) {
         _showError(parsed?['error'] ?? 'Invalid QR code');
