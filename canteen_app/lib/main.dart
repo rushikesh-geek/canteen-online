@@ -2,18 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/student/user_dashboard.dart';
 import 'screens/counter/counter_dashboard.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+
+/// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('📱 Background message: ${message.notification?.title}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Set up background message handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  
   runApp(const CanteenApp());
 }
 
@@ -72,10 +85,18 @@ class RoleRouter extends StatefulWidget {
 }
 
 class _RoleRouterState extends State<RoleRouter> {
+  final NotificationService _notificationService = NotificationService();
+  
   @override
   void initState() {
     super.initState();
     _ensureUserDocument();
+    _initializeNotifications();
+  }
+
+  /// Initialize notification service
+  Future<void> _initializeNotifications() async {
+    await _notificationService.initialize();
   }
 
   /// Ensure user document exists in Firestore with proper role

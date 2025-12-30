@@ -7,12 +7,15 @@
  * TODO: Add proper styling, filters, search functionality
  */
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'slot_management.dart';
 import 'counter_screen.dart';
 import 'user_management_screen.dart';
+import 'package:canteen_app/screens/notification_screen.dart';
+import 'package:canteen_app/services/notification_service.dart';
 
 // ============================================================================
 // SCREEN 1: Live Order Queue Dashboard
@@ -27,12 +30,83 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
   
   // Filter by status (default: show active orders only)
   String selectedFilter = 'active'; // 'active', 'all', 'pending', 'preparing', 'ready'
   
   // Filter by order source
   String orderTypeFilter = 'all'; // 'all', 'app', 'counter'
+  
+  int _unreadCount = 0;
+  StreamSubscription? _notificationSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribeToAdminNotifications();
+    _loadUnreadCount();
+    _listenToNotifications();
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _subscribeToAdminNotifications() async {
+    await _notificationService.subscribeToAdminNotifications();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final count = await _notificationService.getUnreadCount();
+    if (mounted) {
+      setState(() {
+        _unreadCount = count;
+      });
+    }
+  }
+
+  void _listenToNotifications() {
+    _notificationSubscription = _notificationService.onNotification.listen((notification) {
+      if (mounted) {
+        _showNotificationBanner(notification);
+        _loadUnreadCount();
+      }
+    });
+
+    _notificationService.onUnreadCountChange.listen((count) {
+      if (mounted) {
+        setState(() {
+          _unreadCount = count;
+        });
+      }
+    });
+  }
+
+  void _showNotificationBanner(AppNotification notification) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              notification.title,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(notification.body, style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+        backgroundColor: notification.type == NotificationType.newOrder 
+            ? Colors.blue 
+            : Colors.green,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +114,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
+          // Notification icon with badge
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Notifications',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                  );
+                },
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      _unreadCount > 9 ? '9+' : _unreadCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           // Counter operations - QR scan & wallet payments
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),

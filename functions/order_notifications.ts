@@ -1,10 +1,21 @@
 /**
- * Cloud Function: Notify Student on Order Ready
+ * Cloud Functions: Canteen Notification System
  * 
- * Triggers when an order document is updated in Firestore.
- * Sends FCM notification to student when order status changes to READY.
+ * Comprehensive notification system for the canteen app.
+ * Handles all order status changes and payment notifications.
  * 
- * Deployment: firebase deploy --only functions:notifyOrderReady
+ * Notification Types:
+ * - ORDER_CONFIRMED: Order confirmed by admin
+ * - ORDER_PREPARING: Kitchen started preparing
+ * - ORDER_READY: Order ready for pickup
+ * - ORDER_COMPLETED: Order picked up
+ * - ORDER_CANCELLED: Order cancelled
+ * - WALLET_CREDITED: Money added to wallet
+ * - WALLET_DEBITED: Payment made
+ * - NEW_ORDER: (Admin) New order received
+ * - PAYMENT_RECEIVED: (Admin) Payment received
+ * 
+ * Deployment: firebase deploy --only functions
  */
 
 import * as functions from 'firebase-functions';
@@ -23,175 +34,474 @@ interface OrderData {
   userId: string;
   userName: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  paymentStatus?: string;
   slotId: string;
   estimatedPickupTime: Timestamp;
+  totalAmount: number;
   items: {
     itemName: string;
     quantity: number;
     price: number;
   }[];
   placedAt: Timestamp;
+  orderType?: string;
 }
 
 interface UserData {
   userId: string;
   name: string;
   email: string;
-  fcmToken?: string;  // Device token for push notifications
+  fcmToken?: string;
   role: string;
+  notificationsEnabled?: boolean;
+}
+
+interface WalletTransactionData {
+  userId: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  description: string;
+  balanceAfter: number;
+  createdAt: Timestamp;
 }
 
 // ============================================================================
-// CLOUD FUNCTION: Order Status Change Handler
+// CLOUD FUNCTION: Order Status Change Handler (All Status Changes)
 // ============================================================================
 
 /**
- * Firestore trigger that runs when any order document is updated.
- * 
- * TRIGGER PATTERN:
- * - Runs on every order document write (create, update, delete)
- * - We filter for specific status transitions inside the function
- * - More efficient than client-side listeners for notifications
- * 
- * SECURITY:
- * - Runs with admin privileges (bypasses Firestore security rules)
- * - No user authentication needed - triggered by database events
+ * Comprehensive order status notification handler.
+ * Sends FCM notifications for all order status transitions.
  */
-export const notifyOrderReady = functions.firestore
+export const notifyOrderStatusChange = functions.firestore
   .document('orders/{orderId}')
   .onUpdate(async (change, context) => {
-    
-    // STEP 1: Extract before and after states
     const beforeData = change.before.data() as OrderData;
     const afterData = change.after.data() as OrderData;
     const orderId = context.params.orderId;
 
-    // STEP 2: Check if status changed from PREPARING → READY
-    // This is the only transition we care about for this notification
-    if (beforeData.status !== 'preparing' || afterData.status !== 'ready') {
-      // Status didn't change to ready, or wasn't preparing before
-      // Exit early to save execution time
-      console.log(`Order ${orderId}: Status change ${beforeData.status} → ${afterData.status}, skipping notification`);
+    // Check if status actually changed
+    if (beforeData.status === afterData.status) {
       return null;
     }
 
-    console.log(`Order ${orderId}: Status changed to READY, sending notification to user ${afterData.userId}`);
+    console.log(`Order ${orderId}: Status change ${beforeData.status} → ${afterData.status}`);
 
-    // STEP 3: Fetch user's FCM device token
-    let fcmToken: string | undefined;
+    // Get notification content based on status transition
+    const notificationContent = getOrderStatusNotification(
+      afterData.status,
+      afterData.items,
+      afterData.estimatedPickupTime
+    );
+
+    if (!notificationContent) {
+      console.log(`Order ${orderId}: No notification configured for status ${afterData.status}`);
+      return null;
+    }
+
+    // Fetch user's FCM token
+    const fcmToken = await getUserFCMToken(afterData.userId);
     
-    try {
-      const userDoc = await admin.firestore()
-        .collection('users')
-        .doc(afterData.userId)
-        .get();
-
-      if (!userDoc.exists) {
-        console.error(`Order ${orderId}: User ${afterData.userId} not found in database`);
-        // TODO: Add fallback notification method (email/SMS) if user exists but no FCM token
-        return null;
-      }
-
-      const userData = userDoc.data() as UserData;
-      fcmToken = userData.fcmToken;
-
-      if (!fcmToken) {
-        console.warn(`Order ${orderId}: User ${afterData.userId} has no FCM token registered`);
-        // TODO: Handle users without FCM token
-        // Options:
-        // 1. Store notification in database for later retrieval
-        // 2. Send email notification as fallback
-        // 3. Flag user for re-registration
-        return null;
-      }
-
-    } catch (error) {
-      console.error(`Order ${orderId}: Error fetching user data:`, error);
+    if (!fcmToken) {
+      console.warn(`Order ${orderId}: User ${afterData.userId} has no FCM token`);
+      // Store notification in Firestore for in-app display
+      await storeNotification(afterData.userId, {
+        type: `ORDER_${afterData.status.toUpperCase()}`,
+        title: notificationContent.title,
+        body: notificationContent.body,
+        data: { orderId, status: afterData.status },
+      });
       return null;
     }
 
-    // STEP 4: Build notification payload
+    // Send FCM notification
+    return sendFCMNotification(fcmToken, {
+      title: notificationContent.title,
+      body: notificationContent.body,
+      data: {
+        orderId: orderId,
+        type: `ORDER_${afterData.status.toUpperCase()}`,
+        status: afterData.status,
+        timestamp: Timestamp.now().toMillis().toString(),
+      },
+    });
+  });
+
+/**
+ * Notify student when a new order is placed (confirmation)
+ */
+export const notifyNewOrder = functions.firestore
+  .document('orders/{orderId}')
+  .onCreate(async (snapshot, context) => {
+    const orderData = snapshot.data() as OrderData;
+    const orderId = context.params.orderId;
+
+    console.log(`New order created: ${orderId}`);
+
+    // Notify the student
+    const fcmToken = await getUserFCMToken(orderData.userId);
+    
+    const pickupTime = formatPickupTime(orderData.estimatedPickupTime);
+    
+    if (fcmToken) {
+      await sendFCMNotification(fcmToken, {
+        title: '📝 Order Placed',
+        body: `Your order has been placed. Estimated pickup: ${pickupTime}`,
+        data: {
+          orderId: orderId,
+          type: 'ORDER_PLACED',
+          timestamp: Timestamp.now().toMillis().toString(),
+        },
+      });
+    }
+
+    // Store notification for in-app display
+    await storeNotification(orderData.userId, {
+      type: 'ORDER_PLACED',
+      title: '📝 Order Placed',
+      body: `Your order has been placed. Estimated pickup: ${pickupTime}`,
+      data: { orderId },
+    });
+
+    // Notify admins about new order
+    await notifyAdmins({
+      title: '🆕 New Order',
+      body: `${orderData.userName} - ${buildItemsSummary(orderData.items)} (₹${orderData.totalAmount})`,
+      data: {
+        orderId: orderId,
+        type: 'NEW_ORDER',
+        userId: orderData.userId,
+        userName: orderData.userName,
+      },
+    });
+
+    return null;
+  });
+
+/**
+ * Notify on wallet transaction
+ */
+export const notifyWalletTransaction = functions.firestore
+  .document('wallet_transactions/{transactionId}')
+  .onCreate(async (snapshot, context) => {
+    const txData = snapshot.data() as WalletTransactionData;
+    const transactionId = context.params.transactionId;
+
+    console.log(`New wallet transaction: ${transactionId}`);
+
+    const fcmToken = await getUserFCMToken(txData.userId);
+    
+    const isCredit = txData.type === 'credit';
+    const title = isCredit ? '💰 Money Added' : '💳 Payment Made';
+    const body = isCredit 
+      ? `₹${txData.amount.toFixed(2)} added to wallet. Balance: ₹${txData.balanceAfter.toFixed(2)}`
+      : `₹${txData.amount.toFixed(2)} paid. ${txData.description}`;
+
+    // Store notification for in-app
+    await storeNotification(txData.userId, {
+      type: isCredit ? 'WALLET_CREDITED' : 'WALLET_DEBITED',
+      title: title,
+      body: body,
+      data: { 
+        transactionId, 
+        amount: txData.amount,
+        balanceAfter: txData.balanceAfter,
+      },
+    });
+
+    if (fcmToken) {
+      await sendFCMNotification(fcmToken, {
+        title: title,
+        body: body,
+        data: {
+          transactionId: transactionId,
+          type: isCredit ? 'WALLET_CREDITED' : 'WALLET_DEBITED',
+          timestamp: Timestamp.now().toMillis().toString(),
+        },
+      });
+    }
+
+    // Check for low balance warning
+    if (txData.balanceAfter < 50 && !isCredit) {
+      await storeNotification(txData.userId, {
+        type: 'LOW_BALANCE',
+        title: '⚠️ Low Wallet Balance',
+        body: `Your wallet balance is ₹${txData.balanceAfter.toFixed(2)}. Add money to continue ordering.`,
+        data: { balance: txData.balanceAfter },
+      });
+
+      if (fcmToken) {
+        await sendFCMNotification(fcmToken, {
+          title: '⚠️ Low Wallet Balance',
+          body: `Your wallet balance is ₹${txData.balanceAfter.toFixed(2)}. Add money to continue ordering.`,
+          data: {
+            type: 'LOW_BALANCE',
+            balance: txData.balanceAfter.toString(),
+            timestamp: Timestamp.now().toMillis().toString(),
+          },
+        });
+      }
+    }
+
+    return null;
+  });
+
+// Legacy function - kept for backward compatibility
+// The new notifyOrderStatusChange handles all status transitions including ready
+export const notifyOrderReady = functions.firestore
+  .document('orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    const beforeData = change.before.data() as OrderData;
+    const afterData = change.after.data() as OrderData;
+    const orderId = context.params.orderId;
+
+    // Only handle preparing → ready transition
+    if (beforeData.status !== 'preparing' || afterData.status !== 'ready') {
+      return null;
+    }
+
+    console.log(`Order ${orderId}: Legacy notifyOrderReady triggered`);
+
+    // Get user FCM token
+    const fcmToken = await getUserFCMToken(afterData.userId);
+
+    if (!fcmToken) {
+      console.warn(`Order ${orderId}: User ${afterData.userId} has no FCM token`);
+      return null;
+    }
+
+    // Build notification
     const pickupTime = formatPickupTime(afterData.estimatedPickupTime);
     const itemsSummary = buildItemsSummary(afterData.items);
-    
-    const notification = {
+
+    const content = {
       title: '🍽️ Your Order is Ready!',
       body: `${itemsSummary} - Pickup by ${pickupTime}`,
+      data: {
+        orderId: orderId,
+        type: 'ORDER_READY',
+        slotId: afterData.slotId,
+        pickupTime: afterData.estimatedPickupTime.toMillis().toString(),
+        timestamp: Timestamp.now().toMillis().toString(),
+      },
     };
 
-    // Data payload (available to app even when notification is not tapped)
-    const data = {
-      orderId: orderId,
+    // Send notification
+    await sendFCMNotification(fcmToken, content);
+    await storeNotification(afterData.userId, {
       type: 'ORDER_READY',
-      slotId: afterData.slotId,
-      pickupTime: afterData.estimatedPickupTime.toMillis().toString(),
-      // Include timestamp for client-side sorting
-      timestamp: Timestamp.now().toMillis().toString()
-    };
+      title: content.title,
+      body: content.body,
+      data: { orderId: orderId },
+    });
 
-    // STEP 5: Send notification via FCM
-    try {
-      const message = {
-        token: fcmToken,
-        notification: notification,
-        data: data,
-        // Android-specific options
-        android: {
-          priority: 'high' as const,
-          notification: {
-            sound: 'default',
-            channelId: 'order_updates',  // App must create this channel
-            priority: 'high' as const,
-            // TODO: Add custom sound for ready notification if desired
-          }
-        },
-        // iOS-specific options
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1,  // Increment app badge
-              // TODO: Define badge count strategy (increment vs. total pending orders)
-            }
-          }
-        }
-      };
-
-      const response = await admin.messaging().send(message);
-      console.log(`Order ${orderId}: Notification sent successfully. Response:`, response);
-
-      // TODO: Log notification delivery to database for analytics
-      // Could track: sent_at, delivered_at, opened_at, etc.
-
-      return response;
-
-    } catch (error: any) {
-      // FCM send failed - log error
-      console.error(`Order ${orderId}: Failed to send notification:`, error);
-
-      // Common FCM errors:
-      // - Invalid token (user uninstalled app)
-      // - Token expired
-      // - Network issues
-      
-      if (error.code === 'messaging/invalid-registration-token' ||
-          error.code === 'messaging/registration-token-not-registered') {
-        console.warn(`Order ${orderId}: Invalid FCM token for user ${afterData.userId}, should remove from database`);
-        // TODO: Remove invalid FCM token from user document
-        // await admin.firestore().collection('users').doc(afterData.userId).update({
-        //   fcmToken: admin.firestore.FieldValue.delete()
-        // });
-      }
-
-      // For hackathon: simple logging is enough
-      // Production: retry queue, alerting, etc.
-      return null;
-    }
+    return null;
   });
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Get user's FCM token from Firestore
+ */
+async function getUserFCMToken(userId: string): Promise<string | undefined> {
+  try {
+    const userDoc = await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .get();
+
+    if (!userDoc.exists) {
+      console.warn(`User ${userId} not found`);
+      return undefined;
+    }
+
+    const userData = userDoc.data() as UserData;
+    return userData.fcmToken;
+  } catch (error) {
+    console.error(`Error fetching user ${userId}:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Send FCM push notification
+ */
+async function sendFCMNotification(
+  token: string,
+  content: {
+    title: string;
+    body: string;
+    data: Record<string, string>;
+  }
+): Promise<string | null> {
+  try {
+    const message = {
+      token: token,
+      notification: {
+        title: content.title,
+        body: content.body,
+      },
+      data: content.data,
+      android: {
+        priority: 'high' as const,
+        notification: {
+          sound: 'default',
+          channelId: 'order_updates',
+          priority: 'high' as const,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+          },
+        },
+      },
+    };
+
+    const response = await admin.messaging().send(message);
+    console.log(`FCM notification sent: ${response}`);
+    return response;
+  } catch (error: any) {
+    console.error(`FCM send error:`, error);
+    
+    // Handle invalid token
+    if (error.code === 'messaging/invalid-registration-token' ||
+        error.code === 'messaging/registration-token-not-registered') {
+      console.warn(`Invalid FCM token, should be removed`);
+    }
+    
+    return null;
+  }
+}
+
+/**
+ * Store notification in Firestore for in-app display
+ */
+async function storeNotification(
+  userId: string,
+  notification: {
+    type: string;
+    title: string;
+    body: string;
+    data: Record<string, any>;
+  }
+): Promise<void> {
+  try {
+    await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('notifications')
+      .add({
+        ...notification,
+        timestamp: Timestamp.now(),
+        isRead: false,
+      });
+    console.log(`Notification stored for user ${userId}`);
+  } catch (error) {
+    console.error(`Error storing notification:`, error);
+  }
+}
+
+/**
+ * Notify all admin users
+ */
+async function notifyAdmins(notification: {
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}): Promise<void> {
+  try {
+    // Get all admin users
+    const adminsSnapshot = await admin.firestore()
+      .collection('users')
+      .where('role', 'in', ['admin', 'counter'])
+      .get();
+
+    const tokens: string[] = [];
+    const adminIds: string[] = [];
+
+    adminsSnapshot.docs.forEach((doc) => {
+      const userData = doc.data() as UserData;
+      if (userData.fcmToken) {
+        tokens.push(userData.fcmToken);
+      }
+      adminIds.push(doc.id);
+    });
+
+    // Store notification for each admin
+    for (const adminId of adminIds) {
+      await storeNotification(adminId, {
+        type: notification.data.type || 'ADMIN_NOTIFICATION',
+        title: notification.title,
+        body: notification.body,
+        data: notification.data,
+      });
+    }
+
+    // Send FCM to all admins with tokens
+    if (tokens.length > 0) {
+      const message = {
+        notification: {
+          title: notification.title,
+          body: notification.body,
+        },
+        data: notification.data,
+        tokens: tokens,
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+      console.log(`Admin notifications: ${response.successCount} sent, ${response.failureCount} failed`);
+    }
+  } catch (error) {
+    console.error(`Error notifying admins:`, error);
+  }
+}
+
+/**
+ * Get notification content based on order status
+ */
+function getOrderStatusNotification(
+  status: string,
+  items: OrderData['items'],
+  pickupTime: Timestamp
+): { title: string; body: string } | null {
+  const itemsSummary = buildItemsSummary(items);
+  const timeStr = formatPickupTime(pickupTime);
+
+  switch (status) {
+    case 'confirmed':
+      return {
+        title: '✅ Order Confirmed',
+        body: `Your order has been confirmed. Pickup at ${timeStr}`,
+      };
+    case 'preparing':
+      return {
+        title: '👨‍🍳 Order Being Prepared',
+        body: `${itemsSummary} - Kitchen has started preparing your order`,
+      };
+    case 'ready':
+      return {
+        title: '🍽️ Order Ready!',
+        body: `${itemsSummary} - Pickup by ${timeStr}`,
+      };
+    case 'completed':
+      return {
+        title: '🎉 Order Completed',
+        body: 'Thank you for your order! Enjoy your meal.',
+      };
+    case 'cancelled':
+      return {
+        title: '❌ Order Cancelled',
+        body: 'Your order has been cancelled. Any payment will be refunded.',
+      };
+    default:
+      return null;
+  }
+}
 
 /**
  * Formats pickup time for notification display.
@@ -211,8 +521,6 @@ function formatPickupTime(timestamp: Timestamp): string {
 /**
  * Builds a short summary of order items for notification.
  * Example: "2x Dosa, 1x Chai, 1x Samosa"
- * 
- * Limits to 3 items to keep notification concise.
  */
 function buildItemsSummary(items: OrderData['items']): string {
   const MAX_ITEMS = 3;
@@ -229,108 +537,11 @@ function buildItemsSummary(items: OrderData['items']): string {
 }
 
 // ============================================================================
-// ADDITIONAL NOTIFICATION FUNCTIONS (Optional)
-// ============================================================================
-
-/**
- * Optional: Notify when order is confirmed (PENDING → CONFIRMED).
- * Can be enabled by uncommenting and deploying.
- */
-/*
-export const notifyOrderConfirmed = functions.firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change, context) => {
-    
-    const beforeData = change.before.data() as OrderData;
-    const afterData = change.after.data() as OrderData;
-    const orderId = context.params.orderId;
-
-    // Check for PENDING → CONFIRMED transition
-    if (beforeData.status !== 'pending' || afterData.status !== 'confirmed') {
-      return null;
-    }
-
-    // Fetch user FCM token
-    const userDoc = await admin.firestore()
-      .collection('users')
-      .doc(afterData.userId)
-      .get();
-
-    if (!userDoc.exists) {
-      return null;
-    }
-
-    const userData = userDoc.data() as UserData;
-    const fcmToken = userData.fcmToken;
-
-    if (!fcmToken) {
-      return null;
-    }
-
-    // Send notification
-    const pickupTime = formatPickupTime(afterData.estimatedPickupTime);
-    
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: '✅ Order Confirmed',
-        body: `Your order has been confirmed. Pickup at ${pickupTime}`,
-      },
-      data: {
-        orderId: orderId,
-        type: 'ORDER_CONFIRMED',
-        pickupTime: afterData.estimatedPickupTime.toMillis().toString()
-      }
-    };
-
-    try {
-      await admin.messaging().send(message);
-      console.log(`Order ${orderId}: Confirmation notification sent`);
-    } catch (error) {
-      console.error(`Order ${orderId}: Failed to send confirmation:`, error);
-    }
-
-    return null;
-  });
-*/
-
-// ============================================================================
-// FIRESTORE SCHEMA ADDITION NEEDED
-// ============================================================================
-
-/*
- * Add to users collection schema:
- * 
- * {
- *   userId: string,
- *   name: string,
- *   email: string,
- *   phoneNumber: string,
- *   role: string,
- *   rfidTag: string | null,
- *   
- *   // NEW FIELDS FOR NOTIFICATIONS:
- *   fcmToken: string | null,           // Device FCM registration token
- *   fcmTokenUpdatedAt: timestamp,      // When token was last updated
- *   notificationsEnabled: boolean,     // User preference
- *   
- *   createdAt: timestamp,
- *   isActive: boolean
- * }
- * 
- * Client app must:
- * 1. Request notification permission from user
- * 2. Get FCM token using Firebase Messaging SDK
- * 3. Save token to user document on login/app start
- * 4. Update token when it refreshes (FCM tokens can change)
- */
-
-// ============================================================================
 // DEPLOYMENT NOTES
 // ============================================================================
 
 /*
- * BEFORE DEPLOYING:
+ * DEPLOYING:
  * 
  * 1. Install dependencies:
  *    cd functions
@@ -339,23 +550,16 @@ export const notifyOrderConfirmed = functions.firestore
  * 2. Set Firebase project:
  *    firebase use <project-id>
  * 
- * 3. Deploy function:
- *    firebase deploy --only functions:notifyOrderReady
+ * 3. Deploy all functions:
+ *    firebase deploy --only functions
  * 
- * 4. Configure FCM in Firebase Console:
- *    - Enable Cloud Messaging API
- *    - Generate FCM server key (if not using Admin SDK)
- * 
- * 5. Test notification:
- *    - Place test order
- *    - Manually update status from 'preparing' to 'ready' in Firestore console
- *    - Check function logs: firebase functions:log
+ * 4. Or deploy individual functions:
+ *    firebase deploy --only functions:notifyOrderStatusChange
+ *    firebase deploy --only functions:notifyNewOrder
+ *    firebase deploy --only functions:notifyWalletTransaction
  * 
  * MONITORING:
- * - View logs: firebase functions:log --only notifyOrderReady
- * - Check execution count in Firebase Console → Functions
- * - Monitor FCM delivery in Firebase Console → Cloud Messaging
- * 
- * TODO: Add function timeout and memory configuration if needed
- * functions.firestore.document().onUpdate({ timeoutSeconds: 60, memory: '256MB' })
+ * - View logs: firebase functions:log
+ * - Check execution in Firebase Console → Functions
+ * - Monitor FCM in Firebase Console → Cloud Messaging
  */
