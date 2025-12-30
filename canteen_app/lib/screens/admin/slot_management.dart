@@ -123,9 +123,16 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
         
         // Sort by startTime
         slots.sort((a, b) {
-          final aTime = (a.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
-          final bTime = (b.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
-          return aTime.compareTo(bTime);
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aTime = aData['startTime'];
+          final bTime = bData['startTime'];
+          
+          // Handle both Timestamp and String types
+          final aComparable = aTime is Timestamp ? aTime.toDate() : DateTime.tryParse(aTime.toString()) ?? DateTime(2000);
+          final bComparable = bTime is Timestamp ? bTime.toDate() : DateTime.tryParse(bTime.toString()) ?? DateTime(2000);
+          
+          return aComparable.compareTo(bComparable);
         });
 
         if (slots.isEmpty) {
@@ -529,7 +536,10 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
     final formKey = GlobalKey<FormState>();
 
     // Get the date from the slot document
-    final dateStr = data['date'] as String;
+    final dateField = data['date'];
+    final dateStr = dateField is Timestamp 
+        ? DateFormat('yyyy-MM-dd').format(dateField.toDate()) 
+        : dateField.toString();
 
     await showDialog(
       context: context,

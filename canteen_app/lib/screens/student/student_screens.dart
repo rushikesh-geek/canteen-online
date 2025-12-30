@@ -614,9 +614,16 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
                 }).toList();
                 
                 slots.sort((a, b) {
-                  final aTime = (a.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
-                  final bTime = (b.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
-                  return aTime.compareTo(bTime);
+                  final aData = a.data() as Map<String, dynamic>;
+                  final bData = b.data() as Map<String, dynamic>;
+                  final aTime = aData['startTime'];
+                  final bTime = bData['startTime'];
+                  
+                  // Handle both Timestamp and String types
+                  final aComparable = aTime is Timestamp ? aTime.toDate() : DateTime.tryParse(aTime.toString()) ?? DateTime(2000);
+                  final bComparable = bTime is Timestamp ? bTime.toDate() : DateTime.tryParse(bTime.toString()) ?? DateTime(2000);
+                  
+                  return aComparable.compareTo(bComparable);
                 });
                 final allSlots = snapshot.data!.docs;
                 final now = DateTime.now();
@@ -797,8 +804,17 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
   /// Handles both Timestamp and String ("HH:mm") formats
   bool _isValidSlot(Map<String, dynamic> slotData, DateTime now) {
     try {
-      // Parse slot date
-      final slotDateStr = slotData['date'] as String?;
+      // Parse slot date - handle both Timestamp and String formats
+      final slotDateField = slotData['date'];
+      String? slotDateStr;
+      
+      if (slotDateField is Timestamp) {
+        final dt = slotDateField.toDate();
+        slotDateStr = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+      } else if (slotDateField is String) {
+        slotDateStr = slotDateField;
+      }
+      
       if (slotDateStr == null) return false;
       
       final dateParts = slotDateStr.split('-');
