@@ -1082,18 +1082,16 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Filter and sort client-side
-          final todayStart = _getTodayStart();
-          var orders = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final placedAt = data['placedAt'] as Timestamp?;
-            if (placedAt == null) return false;
-            return placedAt.compareTo(todayStart) > 0;
-          }).toList();
+          // Get all orders and sort by placedAt timestamp (latest first)
+          var orders = snapshot.data!.docs.toList();
           
+          // Sort orders: LATEST to OLDEST (descending by placedAt)
           orders.sort((a, b) {
-            final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-            final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = (aData['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+            final bTime = (bData['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+            // bTime.compareTo(aTime) ensures latest orders appear at TOP
             return bTime.compareTo(aTime);
           });
 
