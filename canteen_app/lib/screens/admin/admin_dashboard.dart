@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'slot_management.dart';
+import 'counter_screen.dart';
+import 'user_management_screen.dart';
 
 // ============================================================================
 // SCREEN 1: Live Order Queue Dashboard
@@ -28,6 +30,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   
   // Filter by status (default: show active orders only)
   String selectedFilter = 'active'; // 'active', 'all', 'pending', 'preparing', 'ready'
+  
+  // Filter by order source
+  String orderTypeFilter = 'all'; // 'all', 'app', 'counter'
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +40,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
+          // Counter operations - QR scan & wallet payments
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'Counter (Scan & Pay)',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CounterScreen()),
+              );
+            },
+          ),
           // Menu management button (Admin only)
           IconButton(
             icon: const Icon(Icons.restaurant_menu),
@@ -57,6 +73,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               );
             },
           ),
+          // User management button (Admin only)
+          IconButton(
+            icon: const Icon(Icons.people),
+            tooltip: 'Manage Users & Roles',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserManagementScreen()),
+              );
+            },
+          ),
           // Filter dropdown
           PopupMenuButton<String>(
             initialValue: selectedFilter,
@@ -65,6 +92,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 selectedFilter = value;
               });
             },
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Status Filter',
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'active', child: Text('Active Orders')),
               const PopupMenuItem(value: 'all', child: Text('All Orders')),
@@ -72,7 +101,57 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const PopupMenuItem(value: 'preparing', child: Text('Preparing Only')),
               const PopupMenuItem(value: 'ready', child: Text('Ready Only')),
             ],
-          ),          // Logout button
+          ),
+          // Order Type Filter
+          PopupMenuButton<String>(
+            initialValue: orderTypeFilter,
+            onSelected: (value) {
+              setState(() {
+                orderTypeFilter = value;
+              });
+            },
+            icon: Icon(
+              orderTypeFilter == 'all' 
+                  ? Icons.all_inclusive 
+                  : orderTypeFilter == 'counter' 
+                      ? Icons.point_of_sale 
+                      : Icons.phone_android,
+            ),
+            tooltip: 'Order Source',
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'all',
+                child: Row(
+                  children: [
+                    Icon(Icons.all_inclusive, size: 20, color: Colors.grey[700]),
+                    const SizedBox(width: 12),
+                    const Text('All Orders'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'app',
+                child: Row(
+                  children: [
+                    Icon(Icons.phone_android, size: 20, color: Colors.blue[700]),
+                    const SizedBox(width: 12),
+                    const Text('App Orders'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'counter',
+                child: Row(
+                  children: [
+                    Icon(Icons.point_of_sale, size: 20, color: Colors.orange[700]),
+                    const SizedBox(width: 12),
+                    const Text('Counter Orders'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // Logout button
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -95,7 +174,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final orders = snapshot.data!.docs;
+          // Apply client-side filtering to avoid composite index
+          final orders = _filterOrders(snapshot.data!.docs);
 
           if (orders.isEmpty) {
             return const Center(child: Text('No orders to display'));
@@ -139,28 +219,51 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Stream<QuerySnapshot> _buildOrderQuery() {
+    // Simple query - filter and sort client-side to avoid composite index
+    return _firestore.collection('orders').snapshots();
+  }
+  
+  /// Filter orders client-side to avoid Firestore composite index requirements
+  List<DocumentSnapshot> _filterOrders(List<DocumentSnapshot> orders) {
     final todayStart = _getTodayStart();
     
-    // Base query: all orders from today
-    Query query = _firestore
-        .collection('orders')
-        .where('placedAt', isGreaterThan: todayStart)
-        .orderBy('placedAt', descending: false); // Oldest first (FIFO)
-
+    // Filter today's orders
+    var filtered = orders.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final placedAt = data['placedAt'] as Timestamp?;
+      if (placedAt == null) return false;
+      return placedAt.compareTo(todayStart) > 0;
+    }).toList();
+    
+    // Apply order type filter (app vs counter)
+    if (orderTypeFilter != 'all') {
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final orderType = data['orderType'] as String? ?? 'app';
+        if (orderTypeFilter == 'counter') {
+          return orderType == 'counter';
+        } else {
+          return orderType != 'counter'; // 'app' or null means app order
+        }
+      }).toList();
+    }
+    
     // Apply status filter
     if (selectedFilter != 'active' && selectedFilter != 'all') {
-      // ⚠️ FIRESTORE COMPOSITE INDEX REQUIRED
-      // Collection: orders
-      // Fields: placedAt (Ascending), status (Ascending)
-      // Reason: Inequality filter (isGreaterThan) + additional where() clause
-      query = _firestore
-          .collection('orders')
-          .where('placedAt', isGreaterThan: todayStart)
-          .where('status', isEqualTo: selectedFilter)
-          .orderBy('placedAt', descending: false);
+      filtered = filtered.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['status'] == selectedFilter;
+      }).toList();
     }
-
-    return query.snapshots();
+    
+    // Sort by placedAt ascending (FIFO)
+    filtered.sort((a, b) {
+      final aTime = ((a.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      final bTime = ((b.data() as Map<String, dynamic>)['placedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+      return aTime.compareTo(bTime);
+    });
+    
+    return filtered;
   }
 
   Map<String, List<DocumentSnapshot>> _groupOrdersByStatus(List<DocumentSnapshot> orders) {
@@ -260,15 +363,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final items = data['items'] as List<dynamic>;
     final status = data['status'] as String;
     final placedAt = (data['placedAt'] as Timestamp).toDate();
+    final orderType = data['orderType'] as String? ?? 'app';
+    final isCounterOrder = orderType == 'counter';
     
     // Handle both String and Timestamp formats (backward compatibility)
-    final estimatedPickupTime = data['estimatedPickupTime'] is Timestamp
-        ? (data['estimatedPickupTime'] as Timestamp).toDate()
-        : DateTime.now(); // Fallback if String format
-    
-    final pickupTimeStr = data['estimatedPickupTime'] is String
-        ? data['estimatedPickupTime'] as String
-        : _formatTime(estimatedPickupTime);
+    // Counter orders don't have estimatedPickupTime - they're served immediately
+    String pickupTimeStr;
+    if (isCounterOrder) {
+      pickupTimeStr = 'Served immediately';
+    } else if (data['estimatedPickupTime'] is Timestamp) {
+      pickupTimeStr = _formatTime((data['estimatedPickupTime'] as Timestamp).toDate());
+    } else if (data['estimatedPickupTime'] is String) {
+      pickupTimeStr = data['estimatedPickupTime'] as String;
+    } else {
+      pickupTimeStr = 'Not set';
+    }
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -280,16 +389,70 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             style: TextStyle(color: accentColor, fontSize: 12),
           ),
         ),
-        title: Text(
-          userName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                userName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: isCounterOrder ? Colors.orange.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isCounterOrder ? Colors.orange : Colors.blue,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isCounterOrder ? Icons.point_of_sale : Icons.phone_android,
+                    size: 12,
+                    color: isCounterOrder ? Colors.orange : Colors.blue,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    isCounterOrder ? 'Counter' : 'App',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isCounterOrder ? Colors.orange : Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_buildItemsSummary(items)),
-            Text('Pickup: $pickupTimeStr', 
-                 style: const TextStyle(fontSize: 12)),
+            Row(
+              children: [
+                Icon(
+                  isCounterOrder ? Icons.check_circle : Icons.schedule,
+                  size: 12,
+                  color: isCounterOrder ? Colors.green : Colors.grey,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isCounterOrder ? pickupTimeStr : 'Pickup: $pickupTimeStr',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCounterOrder ? Colors.green : Colors.grey[700],
+                    fontWeight: isCounterOrder ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         children: [
@@ -298,6 +461,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Order source and payment info
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isCounterOrder ? Colors.orange.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isCounterOrder ? Icons.point_of_sale : Icons.phone_android,
+                            size: 14,
+                            color: isCounterOrder ? Colors.orange : Colors.blue,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isCounterOrder ? 'Counter Order' : 'App Order',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isCounterOrder ? Colors.orange : Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (data['paymentMethod'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getPaymentMethodColor(data['paymentMethod'] as String).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getPaymentMethodIcon(data['paymentMethod'] as String),
+                              size: 14,
+                              color: _getPaymentMethodColor(data['paymentMethod'] as String),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              data['paymentMethod'] as String,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: _getPaymentMethodColor(data['paymentMethod'] as String),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
                 // Full order details
                 const Text('Order Details:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -307,10 +531,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 const Divider(),
                 Text('Order ID: #${orderId.substring(orderId.length - 6).toUpperCase()}'),
                 Text('Placed: ${_formatDateTime(placedAt)}'),
+                if (data['totalAmount'] != null)
+                  Text('Total: ₹${data['totalAmount']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 
-                // Action buttons
-                _buildActionButtons(orderDoc, status),
+                // Action buttons (not shown for counter orders as they're already completed)
+                if (isCounterOrder && status == 'completed')
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Counter order - Served immediately',
+                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _buildActionButtons(orderDoc, status),
               ],
             ),
           ),
@@ -459,6 +706,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   String _formatDateTime(DateTime time) {
     return '${time.day}/${time.month} ${_formatTime(time)}';
+  }
+
+  Color _getPaymentMethodColor(String method) {
+    switch (method.toUpperCase()) {
+      case 'WALLET':
+        return Colors.green;
+      case 'UPI':
+        return Colors.purple;
+      case 'CASH':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getPaymentMethodIcon(String method) {
+    switch (method.toUpperCase()) {
+      case 'WALLET':
+        return Icons.account_balance_wallet;
+      case 'UPI':
+        return Icons.qr_code;
+      case 'CASH':
+        return Icons.payments;
+      default:
+        return Icons.payment;
+    }
   }
 
   Timestamp _getTodayStart() {

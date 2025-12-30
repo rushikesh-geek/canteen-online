@@ -104,12 +104,8 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
     final dateStr = _formatDate(selectedDate);
     
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('orderSlots')
-          .where('date', isEqualTo: dateStr)
-          .where('isActive', isEqualTo: true)
-          .orderBy('startTime')
-          .snapshots(),
+      // Simple query - filter and sort client-side
+      stream: _firestore.collection('orderSlots').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
@@ -119,7 +115,18 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final slots = snapshot.data!.docs;
+        // Filter and sort client-side to avoid composite index
+        var slots = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['date'] == dateStr && data['isActive'] == true;
+        }).toList();
+        
+        // Sort by startTime
+        slots.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
+          final bTime = (b.data() as Map<String, dynamic>)['startTime'] as String? ?? '';
+          return aTime.compareTo(bTime);
+        });
 
         if (slots.isEmpty) {
           return Center(
