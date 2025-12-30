@@ -1112,30 +1112,26 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   }
 
   Widget _buildOrderCard(DocumentSnapshot orderDoc, User user) {
-    try {
-      final orderData = orderDoc.data() as Map<String, dynamic>? ?? {};
-      final orderId = orderDoc.id;
-      
-      // Safely extract fields with null checks
-      final status = orderData['status'] as String? ?? 'pending';
-      final paymentStatus = orderData['paymentStatus'] as String? ?? 'UNPAID';
-      final items = (orderData['items'] as List<dynamic>?) ?? [];
-      final totalAmount = (orderData['totalAmount'] as num?)?.toDouble() ?? 0.0;
-      
-      // Handle both String and Timestamp formats for pickup time
-      String pickupTimeStr = 'Not set';
-      if (orderData['estimatedPickupTime'] != null) {
-        if (orderData['estimatedPickupTime'] is Timestamp) {
-          pickupTimeStr = _formatTime((orderData['estimatedPickupTime'] as Timestamp).toDate());
-        } else if (orderData['estimatedPickupTime'] is String) {
-          pickupTimeStr = orderData['estimatedPickupTime'] as String;
-        }
-      }
-      
-      final isProcessing = _processingPayments.containsKey(orderId);
-      final canPay = status == 'confirmed' && !['paid', 'verification_pending'].contains(paymentStatus) && !isProcessing;
+    final orderData = orderDoc.data() as Map<String, dynamic>;
+    final orderId = orderDoc.id;
+    final status = orderData['status'] as String;
+    final paymentStatus = orderData['paymentStatus'] as String? ?? 'UNPAID';
+    final items = orderData['items'] as List<dynamic>;
+    final totalAmount = (orderData['totalAmount'] as num).toDouble();
+    
+    // Handle both String and Timestamp formats
+    final estimatedPickupTime = orderData['estimatedPickupTime'] is Timestamp
+        ? (orderData['estimatedPickupTime'] as Timestamp).toDate()
+        : DateTime.now();
+    
+    final pickupTimeStr = orderData['estimatedPickupTime'] is String
+        ? orderData['estimatedPickupTime'] as String
+        : _formatTime(estimatedPickupTime);
+    
+    final isProcessing = _processingPayments.containsKey(orderId);
+    final canPay = status == 'confirmed' && !['paid', 'verification_pending'].contains(paymentStatus) && !isProcessing;
 
-      return Card(
+    return Card(
       margin: const EdgeInsets.all(12.0),
       elevation: 2,
       child: Padding(
@@ -1143,7 +1139,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order header with order status and payment status
+            // Order header with BOTH statuses
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1156,42 +1152,13 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                // Payment status badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: paymentStatus == 'paid' 
-                        ? Colors.green.withOpacity(0.1) 
-                        : paymentStatus == 'verification_pending'
-                            ? Colors.orange.withOpacity(0.1)
-                            : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    paymentStatus == 'paid' 
-                        ? '₹ Paid' 
-                        : paymentStatus == 'verification_pending'
-                            ? 'Verifying'
-                            : 'Unpaid',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: paymentStatus == 'paid' 
-                          ? Colors.green[700] 
-                          : paymentStatus == 'verification_pending'
-                              ? Colors.orange[700]
-                              : Colors.red[700],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 PremiumStatusChip(status: status, compact: true),
               ],
             ),
             const SizedBox(height: 12),
             
-            // Premium status timeline (only show if paid and order in progress)
+            // Premium status timeline (only show if paid)
             if (paymentStatus == 'paid' && ['confirmed', 'preparing', 'ready', 'completed'].contains(status)) ...[
               OrderStatusTimeline(
                 currentStatus: status,
@@ -1361,28 +1328,6 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
         ),
       ),
     );
-    } catch (e) {
-      // Return error card if there's an issue with order data
-      return Card(
-        margin: const EdgeInsets.all(12.0),
-        color: Colors.red[50],
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Error loading order: ${orderDoc.id}',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
   }
 
   void _initiatePayment(String orderId, double amount, User user) async {
@@ -1732,17 +1677,10 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   }
 
   String _buildItemsSummary(List<dynamic> items) {
-    if (items.isEmpty) return 'No items';
-    
     return items
-        .where((item) => item is Map<String, dynamic>)
-        .map((item) {
-          final quantity = item['quantity'] ?? 1;
-          final name = item['itemName'] ?? item['name'] ?? 'Item';
-          return '$quantity× $name';
-        })
-        .take(3) // Show only first 3 items
-        .join(', ') + (items.length > 3 ? ' +${items.length - 3} more' : '');
+        .map((item) => '${item['quantity']}× ${item['itemName']}')
+        .take(2) // Show only first 2 items
+        .join(', ');
   }
 
   String _formatTime(DateTime time) {
