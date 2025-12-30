@@ -51,9 +51,14 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
           .doc(user.uid)
           .get();
       
-      if (userDoc.exists && mounted) {
+      if (mounted) {
+        // Set QR data even if user doc doesn't exist (use display name as fallback)
+        final name = userDoc.exists 
+            ? (userDoc.data()?['name'] ?? user.displayName ?? 'Student')
+            : (user.displayName ?? user.email?.split('@')[0] ?? 'Student');
+        
         setState(() {
-          _userName = userDoc.data()?['name'] ?? user.displayName ?? 'Student';
+          _userName = name;
           _qrData = WalletService.generatePaymentQR(
             userId: user.uid,
             userName: _userName,
@@ -495,7 +500,8 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
           return const Center(child: CircularProgressIndicator());
         }
 
-        final transactions = snapshot.data!.docs;
+        // Sort transactions by createdAt (latest first)
+        final transactions = _walletService.sortTransactions(snapshot.data!.docs);
 
         if (transactions.isEmpty) {
           return Center(

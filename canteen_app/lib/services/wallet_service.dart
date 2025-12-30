@@ -215,7 +215,8 @@ class WalletService {
   /// 
   /// Returns null if invalid format
   /// Returns error map if expired or checksum mismatch
-  /// QR codes are valid for 5 minutes only and can be used once
+  /// New format QR codes: valid for 5 minutes, single-use with sessionId
+  /// Old format QR codes: valid for 15 minutes, no single-use check (backward compatibility)
   static Map<String, dynamic>? parsePaymentQR(String qrData) {
     try {
       final parts = qrData.split('|');
@@ -225,7 +226,7 @@ class WalletService {
         return null;
       }
       
-      // New format with sessionId
+      // New format with sessionId (6 parts) - stricter security
       if (parts.length == 6) {
         final userId = parts[1];
         final userName = parts[2];
@@ -255,9 +256,33 @@ class WalletService {
         };
       }
       
-      // Old format (5 parts) - for backward compatibility, mark as expired
+      // Old format (5 parts) - backward compatibility with relaxed expiration
       if (parts.length == 5) {
-        return {'error': 'Old QR format. Please regenerate your QR code.'};
+        final userId = parts[1];
+        final userName = parts[2];
+        final timestamp = int.parse(parts[3]);
+        final checksum = int.parse(parts[4]);
+        
+        // Validate old checksum format
+        final expectedChecksum = (userId.hashCode ^ userName.hashCode ^ timestamp).abs() % 10000;
+        if (checksum != expectedChecksum) {
+          return {'error': 'Invalid QR code. Please generate a new one.'};
+        }
+        
+        // Old format: 15 minutes expiration (more relaxed for backward compatibility)
+        final qrTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        final now = DateTime.now();
+        if (now.difference(qrTime).inMinutes > 15) {
+          return {'error': 'QR code expired. Please generate a new one.'};
+        }
+        
+        return {
+          'userId': userId,
+          'userName': userName,
+          'timestamp': qrTime,
+          'sessionId': null, // Old format - no single-use protection
+          'isValid': true,
+        };
       }
       
       return null;
