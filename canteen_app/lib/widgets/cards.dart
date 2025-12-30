@@ -13,7 +13,7 @@ class MenuItemCard extends StatelessWidget {
   final int quantity;
 
   const MenuItemCard({
-    Key? key,
+    super.key,
     required this.name,
     this.description,
     required this.price,
@@ -22,7 +22,7 @@ class MenuItemCard extends StatelessWidget {
     this.isAvailable = true,
     required this.onAdd,
     this.quantity = 0,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +40,7 @@ class MenuItemCard extends StatelessWidget {
                 child: Image.network(
                   imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (context, error, stackTrace) => Container(
                     color: AppTheme.surfaceGrey,
                     child: const Icon(
                       Icons.restaurant,
@@ -123,7 +123,7 @@ class MenuItemCard extends StatelessWidget {
                       Text(
                         '₹${price.toStringAsFixed(0)}',
                         style: AppTheme.titleMedium.copyWith(
-                          color: AppTheme.primaryOrange,
+                          color: AppTheme.accentOrange,
                         ),
                       ),
                       if (isAvailable)
@@ -134,7 +134,7 @@ class MenuItemCard extends StatelessWidget {
                                   vertical: AppTheme.space4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primaryOrange,
+                                  color: AppTheme.accentOrange,
                                   borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                                 ),
                                 child: Text(
@@ -155,7 +155,7 @@ class MenuItemCard extends StatelessWidget {
                                     child: Icon(
                                       Icons.add,
                                       size: 20,
-                                      color: AppTheme.primaryOrange,
+                                      color: AppTheme.accentOrange,
                                     ),
                                   ),
                                 ),
@@ -183,7 +183,7 @@ class MenuItemCard extends StatelessWidget {
 class StatusBadge extends StatelessWidget {
   final String status;
 
-  const StatusBadge({Key? key, required this.status}) : super(key: key);
+  const StatusBadge({super.key, required this.status});
 
   Color _getColor() {
     switch (status.toLowerCase()) {
@@ -225,7 +225,7 @@ class StatusBadge extends StatelessWidget {
         vertical: AppTheme.space4,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
       ),
       child: Row(
@@ -252,10 +252,10 @@ class CartBadge extends StatelessWidget {
   final VoidCallback onTap;
 
   const CartBadge({
-    Key? key,
+    super.key,
     required this.count,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -302,11 +302,11 @@ class QuantityStepper extends StatelessWidget {
   final VoidCallback onDecrement;
 
   const QuantityStepper({
-    Key? key,
+    super.key,
     required this.quantity,
     required this.onIncrement,
     required this.onDecrement,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

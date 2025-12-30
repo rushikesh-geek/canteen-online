@@ -12,13 +12,13 @@ class PrimaryButton extends StatelessWidget {
   final bool fullWidth;
 
   const PrimaryButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.icon,
     this.isLoading = false,
     this.fullWidth = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -57,12 +57,12 @@ class SecondaryButton extends StatelessWidget {
   final bool fullWidth;
 
   const SecondaryButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.icon,
     this.fullWidth = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +91,11 @@ class TertiaryButton extends StatelessWidget {
   final IconData? icon;
 
   const TertiaryButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.icon,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -124,13 +124,13 @@ class AppIconButton extends StatelessWidget {
   final String? tooltip;
 
   const AppIconButton({
-    Key? key,
+    super.key,
     required this.icon,
     required this.onPressed,
     this.color,
     this.size = 24,
     this.tooltip,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

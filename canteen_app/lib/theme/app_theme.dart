@@ -1,28 +1,44 @@
 import 'package:flutter/material.dart';
 
-/// Material 3 inspired theme for Canteen App
-/// Consistent design system with proper spacing, typography, and colors
+/// Premium Material 3 theme for Canteen App
+/// Production-ready design system with modern aesthetics
 class AppTheme {
   // ============================================================================
-  // COLOR PALETTE
+  // PREMIUM COLOR PALETTE - Material 3
   // ============================================================================
   
-  static const Color primaryOrange = Color(0xFFFF6B35);
-  static const Color deepOrange = Color(0xFFE55934);
-  static const Color lightOrange = Color(0xFFFFF4F0);
+  // Primary: Deep Indigo (premium, trustworthy)
+  static const Color primaryIndigo = Color(0xFF3F51B5);
+  static const Color deepIndigo = Color(0xFF303F9F);
+  static const Color lightIndigo = Color(0xFFE8EAF6);
   
+  // Accent: Warm Orange (appetizing, action)
+  static const Color accentOrange = Color(0xFFFF9800);
+  static const Color deepOrange = Color(0xFFF57C00);
+  static const Color lightOrange = Color(0xFFFFF3E0);
+  
+  // Status Colors
   static const Color successGreen = Color(0xFF4CAF50);
+  static const Color lightGreen = Color(0xFFE8F5E9);
   static const Color warningAmber = Color(0xFFFFA726);
+  static const Color lightAmber = Color(0xFFFFF8E1);
   static const Color errorRed = Color(0xFFE53935);
+  static const Color lightRed = Color(0xFFFFEBEE);
   static const Color infoBlue = Color(0xFF2196F3);
+  static const Color lightBlue = Color(0xFFE3F2FD);
   
+  // Text Colors
   static const Color textPrimary = Color(0xFF1A1A1A);
   static const Color textSecondary = Color(0xFF666666);
   static const Color textHint = Color(0xFF999999);
+  static const Color textDisabled = Color(0xFFCCCCCC);
   
+  // Surface Colors
   static const Color surfaceWhite = Color(0xFFFFFFFF);
-  static const Color surfaceGrey = Color(0xFFF5F5F5);
+  static const Color surfaceGrey = Color(0xFFF5F7FA);
+  static const Color surfaceCard = Color(0xFFFFFFFF);
   static const Color borderGrey = Color(0xFFE0E0E0);
+  static const Color dividerGrey = Color(0xFFEEEEEE);
   
   // ============================================================================
   // SPACING SYSTEM
@@ -36,6 +52,7 @@ class AppTheme {
   static const double space24 = 24.0;
   static const double space32 = 32.0;
   static const double space48 = 48.0;
+  static const double space80 = 80.0;
   
   // ============================================================================
   // BORDER RADIUS
@@ -65,15 +82,21 @@ class AppTheme {
     
     // Color Scheme
     colorScheme: const ColorScheme.light(
-      primary: primaryOrange,
-      primaryContainer: lightOrange,
-      secondary: deepOrange,
+      primary: primaryIndigo,
+      primaryContainer: lightIndigo,
+      secondary: accentOrange,
+      secondaryContainer: lightOrange,
+      tertiary: successGreen,
+      tertiaryContainer: lightGreen,
       surface: surfaceWhite,
+      surfaceContainerHighest: surfaceGrey,
       error: errorRed,
+      errorContainer: lightRed,
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onSurface: textPrimary,
       onError: Colors.white,
+      outline: borderGrey,
     ),
     
     // Scaffold
@@ -84,22 +107,26 @@ class AppTheme {
       elevation: 0,
       centerTitle: false,
       backgroundColor: surfaceWhite,
+      surfaceTintColor: Colors.transparent,
       foregroundColor: textPrimary,
       titleTextStyle: TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
         color: textPrimary,
         letterSpacing: -0.5,
       ),
+      iconTheme: IconThemeData(color: textPrimary),
     ),
     
     // Card
     cardTheme: CardThemeData(
       elevation: elevationLow,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
       ),
-      color: surfaceWhite,
+      color: surfaceCard,
+      surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.symmetric(
         horizontal: space16,
         vertical: space8,
@@ -117,7 +144,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
         ),
-        backgroundColor: primaryOrange,
+        backgroundColor: accentOrange,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(
           fontSize: 16,
@@ -137,7 +164,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusSmall),
         ),
-        foregroundColor: primaryOrange,
+        foregroundColor: primaryIndigo,
         textStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
@@ -155,8 +182,8 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
         ),
-        side: const BorderSide(color: primaryOrange, width: 1.5),
-        foregroundColor: primaryOrange,
+        side: const BorderSide(color: primaryIndigo, width: 1.5),
+        foregroundColor: primaryIndigo,
         textStyle: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
@@ -182,7 +209,7 @@ class AppTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
-        borderSide: const BorderSide(color: primaryOrange, width: 2),
+        borderSide: const BorderSide(color: primaryIndigo, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
@@ -222,14 +249,14 @@ class AppTheme {
     // Floating Action Button
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       elevation: elevationMedium,
-      backgroundColor: primaryOrange,
+      backgroundColor: accentOrange,
       foregroundColor: Colors.white,
     ),
     
     // Bottom Navigation Bar
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: surfaceWhite,
-      selectedItemColor: primaryOrange,
+      selectedItemColor: primaryIndigo,
       unselectedItemColor: textSecondary,
       type: BottomNavigationBarType.fixed,
       elevation: elevationHigh,
@@ -353,7 +380,7 @@ class AppTheme {
   
   static List<BoxShadow> shadowSoft = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       blurRadius: 8,
       offset: const Offset(0, 2),
     ),
@@ -361,7 +388,7 @@ class AppTheme {
   
   static List<BoxShadow> shadowMedium = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.08),
+      color: Colors.black.withValues(alpha: 0.08),
       blurRadius: 12,
       offset: const Offset(0, 4),
     ),
@@ -369,7 +396,7 @@ class AppTheme {
   
   static List<BoxShadow> shadowStrong = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.12),
+      color: Colors.black.withValues(alpha: 0.12),
       blurRadius: 16,
       offset: const Offset(0, 6),
     ),

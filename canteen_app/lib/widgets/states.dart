@@ -112,7 +112,7 @@ class ErrorState extends StatelessWidget {
 class LoadingState extends StatelessWidget {
   final String? message;
 
-  const LoadingState({Key? key, this.message}) : super(key: key);
+  const LoadingState({super.key, this.message});
 
   @override
   Widget build(BuildContext context) {
