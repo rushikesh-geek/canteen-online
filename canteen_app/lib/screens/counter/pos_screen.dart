@@ -802,6 +802,18 @@ class _POSScreenState extends State<POSScreen> {
         adminId: adminId,
       );
       
+      // Mark QR session as used (prevents reuse)
+      final sessionId = _customer!['sessionId'] as String?;
+      if (sessionId != null) {
+        await _walletService.markQRSessionAsUsed(
+          sessionId: sessionId,
+          userId: studentId,
+          adminId: adminId,
+          amount: _totalAmount,
+          orderId: orderRef.id,
+        );
+      }
+      
       if (!mounted) return;
       
       _showSuccessDialog(
@@ -1359,6 +1371,22 @@ class _WalletQRScannerSheetState extends State<_WalletQRScannerSheet> {
         );
         setState(() => _isProcessing = false);
         return;
+      }
+      
+      // Check if QR has already been used (security check)
+      final sessionId = parsed['sessionId'] as String?;
+      if (sessionId != null) {
+        final usedError = await widget.walletService.validateQRNotUsed(sessionId);
+        if (usedError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(usedError),
+              backgroundColor: AppTheme.errorRed,
+            ),
+          );
+          setState(() => _isProcessing = false);
+          return;
+        }
       }
       
       final userId = parsed['userId'] as String;

@@ -352,13 +352,47 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
             ),
           ),
           
+          const SizedBox(height: AppTheme.space12),
+          
+          // Security notice
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.space12,
+              vertical: AppTheme.space8,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.warningAmber.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+              border: Border.all(color: AppTheme.warningAmber.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.timer_outlined,
+                  color: AppTheme.warningAmber,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Valid for 5 minutes • Single use only',
+                  style: TextStyle(
+                    color: AppTheme.warningAmber,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
           const SizedBox(height: AppTheme.space16),
           
           // Refresh button
           OutlinedButton.icon(
             onPressed: _regenerateQR,
             icon: const Icon(Icons.refresh),
-            label: const Text('Refresh QR Code'),
+            label: const Text('Generate New QR Code'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.primaryIndigo,
               side: BorderSide(color: AppTheme.primaryIndigo),

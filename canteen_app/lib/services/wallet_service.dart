@@ -194,55 +194,73 @@ class WalletService {
 
   /// Generate payment QR data for student
   /// 
-  /// QR contains: userId|name|timestamp|checksum
-  /// This is an OFFLINE QR - doesn't need internet to display
+  /// QR contains: userId|name|timestamp|sessionId|checksum
+  /// This is a SINGLE-USE QR - valid for 5 minutes only
+  /// Each QR has a unique sessionId to prevent reuse
   static String generatePaymentQR({
     required String userId,
     required String userName,
   }) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    // Simple checksum for basic validation
-    final checksum = (userId.hashCode ^ userName.hashCode ^ timestamp).abs() % 10000;
+    // Generate unique session ID for this QR code (prevents reuse)
+    final sessionId = '${userId.hashCode.abs().toString().padLeft(8, '0')}${timestamp.toString().substring(timestamp.toString().length - 8)}';
+    // Enhanced checksum including sessionId
+    final checksum = (userId.hashCode ^ userName.hashCode ^ timestamp ^ sessionId.hashCode).abs() % 100000;
     
-    // Format: CANTEEN|userId|userName|timestamp|checksum
-    return 'CANTEEN|$userId|$userName|$timestamp|$checksum';
+    // Format: CANTEEN|userId|userName|timestamp|sessionId|checksum
+    return 'CANTEEN|$userId|$userName|$timestamp|$sessionId|$checksum';
   }
 
   /// Parse and validate payment QR data
   /// 
-  /// Returns null if invalid
+  /// Returns null if invalid format
+  /// Returns error map if expired or checksum mismatch
+  /// QR codes are valid for 5 minutes only and can be used once
   static Map<String, dynamic>? parsePaymentQR(String qrData) {
     try {
       final parts = qrData.split('|');
       
-      if (parts.length != 5 || parts[0] != 'CANTEEN') {
+      // Support both old (5 parts) and new (6 parts) format
+      if (parts[0] != 'CANTEEN') {
         return null;
       }
       
-      final userId = parts[1];
-      final userName = parts[2];
-      final timestamp = int.parse(parts[3]);
-      final checksum = int.parse(parts[4]);
-      
-      // Validate checksum
-      final expectedChecksum = (userId.hashCode ^ userName.hashCode ^ timestamp).abs() % 10000;
-      if (checksum != expectedChecksum) {
-        return null;
+      // New format with sessionId
+      if (parts.length == 6) {
+        final userId = parts[1];
+        final userName = parts[2];
+        final timestamp = int.parse(parts[3]);
+        final sessionId = parts[4];
+        final checksum = int.parse(parts[5]);
+        
+        // Validate checksum
+        final expectedChecksum = (userId.hashCode ^ userName.hashCode ^ timestamp ^ sessionId.hashCode).abs() % 100000;
+        if (checksum != expectedChecksum) {
+          return {'error': 'Invalid QR code. Please generate a new one.'};
+        }
+        
+        // Check if QR is not too old (valid for 5 minutes only)
+        final qrTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        final now = DateTime.now();
+        if (now.difference(qrTime).inMinutes > 5) {
+          return {'error': 'QR code expired (valid for 5 minutes). Please generate a new one.'};
+        }
+        
+        return {
+          'userId': userId,
+          'userName': userName,
+          'timestamp': qrTime,
+          'sessionId': sessionId,
+          'isValid': true,
+        };
       }
       
-      // Check if QR is not too old (valid for 24 hours)
-      final qrTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-      final now = DateTime.now();
-      if (now.difference(qrTime).inHours > 24) {
-        return {'error': 'QR code expired. Please generate a new one.'};
+      // Old format (5 parts) - for backward compatibility, mark as expired
+      if (parts.length == 5) {
+        return {'error': 'Old QR format. Please regenerate your QR code.'};
       }
       
-      return {
-        'userId': userId,
-        'userName': userName,
-        'timestamp': qrTime,
-        'isValid': true,
-      };
+      return null;
     } catch (e) {
       return null;
     }
@@ -253,5 +271,43 @@ class WalletService {
     final doc = await _firestore.collection('users').doc(userId).get();
     if (!doc.exists) return null;
     return doc.data();
+  }
+
+  /// Check if a QR session ID has already been used
+  /// Returns true if the QR code has been used before
+  Future<bool> isQRSessionUsed(String sessionId) async {
+    final doc = await _firestore.collection('used_qr_sessions').doc(sessionId).get();
+    return doc.exists;
+  }
+
+  /// Mark a QR session ID as used (prevents reuse)
+  /// Should be called after successful payment processing
+  Future<void> markQRSessionAsUsed({
+    required String sessionId,
+    required String userId,
+    required String adminId,
+    required double amount,
+    required String orderId,
+  }) async {
+    await _firestore.collection('used_qr_sessions').doc(sessionId).set({
+      'sessionId': sessionId,
+      'userId': userId,
+      'adminId': adminId,
+      'amount': amount,
+      'orderId': orderId,
+      'usedAt': FieldValue.serverTimestamp(),
+      // Auto-delete after 24 hours to save storage (optional cleanup)
+      'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(hours: 24))),
+    });
+  }
+
+  /// Validate QR code hasn't been used before
+  /// Returns error message if already used, null if valid
+  Future<String?> validateQRNotUsed(String sessionId) async {
+    final isUsed = await isQRSessionUsed(sessionId);
+    if (isUsed) {
+      return 'This QR code has already been used. Please ask the student to generate a new one.';
+    }
+    return null;
   }
 }

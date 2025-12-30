@@ -157,6 +157,16 @@ class _ScanAndPayTabState extends State<ScanAndPayTab> {
         return;
       }
       
+      // Check if QR has already been used (security check)
+      final sessionId = parsed['sessionId'] as String?;
+      if (sessionId != null) {
+        final usedError = await _walletService.validateQRNotUsed(sessionId);
+        if (usedError != null) {
+          _showError(usedError);
+          return;
+        }
+      }
+      
       // Fetch user details and balance
       final userId = parsed['userId'] as String;
       final userDetails = await _walletService.getUserDetails(userId);
@@ -285,6 +295,18 @@ class _ScanAndPayTabState extends State<ScanAndPayTab> {
         orderId: orderRef.id,
         adminId: adminId,
       );
+      
+      // Mark QR session as used (prevents reuse)
+      final sessionId = _scannedUser!['sessionId'] as String?;
+      if (sessionId != null) {
+        await _walletService.markQRSessionAsUsed(
+          sessionId: sessionId,
+          userId: studentId,
+          adminId: adminId,
+          amount: total,
+          orderId: orderRef.id,
+        );
+      }
       
       if (!mounted) return;
       
