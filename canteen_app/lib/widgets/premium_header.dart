@@ -92,6 +92,7 @@ class GreetingHeader extends StatelessWidget {
 }
 
 /// Order status timeline widget
+/// Shows the order progress: Confirmed → Preparing → Ready → Completed
 class OrderStatusTimeline extends StatelessWidget {
   final String currentStatus;
   final String paymentStatus;
@@ -104,8 +105,16 @@ class OrderStatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statuses = ['confirmed', 'paid', 'preparing', 'ready', 'completed'];
-    final currentIndex = statuses.indexOf(currentStatus);
+    // Order flow: confirmed → preparing → ready → completed
+    // Payment status is separate and shown elsewhere
+    final statuses = ['confirmed', 'preparing', 'ready', 'completed'];
+    
+    // Find current index, default to 0 if status not found
+    int currentIndex = statuses.indexOf(currentStatus);
+    if (currentIndex == -1) {
+      // Handle 'pending' or unknown status - show as before confirmed
+      currentIndex = currentStatus == 'pending' ? -1 : 0;
+    }
     
     return Container(
       padding: const EdgeInsets.all(AppTheme.space16),
@@ -127,8 +136,8 @@ class OrderStatusTimeline extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 32,
-                        height: 32,
+                        width: 28,
+                        height: 28,
                         decoration: BoxDecoration(
                           color: isCompleted 
                               ? AppTheme.successGreen 
@@ -142,8 +151,8 @@ class OrderStatusTimeline extends StatelessWidget {
                           ),
                         ),
                         child: Icon(
-                          isCompleted ? Icons.check : Icons.circle,
-                          size: 16,
+                          isCompleted ? Icons.check : Icons.circle_outlined,
+                          size: 14,
                           color: isCompleted ? Colors.white : AppTheme.textHint,
                         ),
                       ),
@@ -163,12 +172,14 @@ class OrderStatusTimeline extends StatelessWidget {
                   ),
                 ),
                 if (index < statuses.length - 1)
-                  Container(
-                    width: 20,
-                    height: 2,
-                    color: isCompleted 
-                        ? AppTheme.successGreen 
-                        : AppTheme.borderGrey,
+                  Flexible(
+                    child: Container(
+                      height: 2,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      color: isCompleted 
+                          ? AppTheme.successGreen 
+                          : AppTheme.borderGrey,
+                    ),
                   ),
               ],
             ),
@@ -181,8 +192,7 @@ class OrderStatusTimeline extends StatelessWidget {
   String _getStatusLabel(String status) {
     switch (status) {
       case 'confirmed': return 'Confirmed';
-      case 'paid': return 'Paid';
-      case 'preparing': return 'Cooking';
+      case 'preparing': return 'Preparing';
       case 'ready': return 'Ready';
       case 'completed': return 'Done';
       default: return status;
@@ -243,11 +253,17 @@ class PremiumStatusChip extends StatelessWidget {
   ({Color color, Color backgroundColor, IconData icon, String label}) _getStatusConfig(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
+        return (
+          color: AppTheme.warningAmber,
+          backgroundColor: AppTheme.lightAmber,
+          icon: Icons.hourglass_empty,
+          label: 'Pending',
+        );
       case 'confirmed':
         return (
           color: AppTheme.infoBlue,
           backgroundColor: AppTheme.lightBlue,
-          icon: Icons.schedule,
+          icon: Icons.check_circle_outline,
           label: 'Confirmed',
         );
       case 'paid':
@@ -277,6 +293,13 @@ class PremiumStatusChip extends StatelessWidget {
           backgroundColor: AppTheme.surfaceGrey,
           icon: Icons.check_circle_outline,
           label: 'Completed',
+        );
+      case 'cancelled':
+        return (
+          color: AppTheme.errorRed,
+          backgroundColor: AppTheme.errorRed.withOpacity(0.1),
+          icon: Icons.cancel,
+          label: 'Cancelled',
         );
       default:
         return (
